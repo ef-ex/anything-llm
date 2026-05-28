@@ -99,8 +99,27 @@ async function chatPrompt(workspace, user = null, opts = {}) {
     user?.id,
     workspace?.id
   );
+
+  // Fetch Vela project-aware context and prepend to system prompt
+  let enrichedPrompt = systemPrompt;
+  try {
+    const { fetchVelaContext, buildContextPrefix } = require("../velaContext");
+    const velaCtx = await fetchVelaContext({
+      userId: user?.id ? String(user.id) : null,
+      projectId: workspace?.velaProjectId || null,
+    });
+    if (velaCtx) {
+      const prefix = buildContextPrefix(velaCtx);
+      if (prefix) {
+        enrichedPrompt = prefix + "\n\n" + systemPrompt;
+      }
+    }
+  } catch {
+    // Vela context is optional — never block chat on its failure
+  }
+
   return promptWithMemories({
-    systemPrompt,
+    systemPrompt: enrichedPrompt,
     userId: user?.id ?? null,
     workspaceId: workspace?.id,
     prompt: opts.prompt ?? "",
