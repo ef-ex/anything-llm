@@ -72,6 +72,24 @@ const router = createBrowserRouter([
         },
       },
       {
+        path: "/settings/subscription-access",
+        lazy: async () => {
+          const { default: SubscriptionAccess } = await import(
+            "@/pages/GeneralSettings/SubscriptionAccess"
+          );
+          return { element: <AdminRoute Component={SubscriptionAccess} /> };
+        },
+      },
+      {
+        path: "/settings/role-presets",
+        lazy: async () => {
+          const { default: RolePresetsSettings } = await import(
+            "@/pages/GeneralSettings/RolePresets"
+          );
+          return { element: <AdminRoute Component={RolePresetsSettings} /> };
+        },
+      },
+      {
         path: "/settings/transcription-preference",
         lazy: async () => {
           const { default: GeneralTranscriptionPreference } = await import(

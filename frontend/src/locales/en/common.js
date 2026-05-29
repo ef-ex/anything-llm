@@ -928,6 +928,24 @@ const TRANSLATIONS = {
       },
     },
   },
+  role_presets_admin: {
+    title: "Studio Roles",
+    description:
+      "Create and edit Vela role presets that map studio tasks to provider models. Bundled roles ship with Vela; custom roles and overrides are stored in the Vela database.",
+    new_button: "New role",
+    col_name: "Role",
+    col_route: "Default route",
+    col_context: "Context",
+    col_source: "Source",
+    edit: "Edit",
+    delete: "Delete",
+    empty: "No role presets found.",
+    vela_unreachable:
+      "Vela API is not reachable. Start the dev stack with scripts/launch-dev.ps1 (candidate on port 7701).",
+    delete_confirm: 'Delete role "{{name}}"? This cannot be undone.',
+    deleted: "Role preset deleted.",
+    cannot_delete_bundled: "Bundled roles cannot be deleted. Remove a custom override from the database instead.",
+  },
   "model-router": {
     title: "Model Routers",
     description:
@@ -1642,6 +1660,11 @@ const TRANSLATIONS = {
         "Vela backend is not reachable. Start the Vela candidate on port 7701.",
       error: "Could not load studio roles.",
       route_summary: "{{model}} · context {{depth}}",
+    },
+    vela_cursor_composer: {
+      fast_mode: "Composer 2.5 fast mode",
+      fast_on: "Using Composer 2.5 Fast",
+      fast_off: "Using Composer 2.5 (standard)",
     },
   },
   profile_settings: {

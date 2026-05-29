@@ -1,4 +1,9 @@
 const { resolveProviderConnector, getLLMProvider } = require("../../../utils/helpers");
+const { Workspace } = require("../../../models/workspace");
+const {
+  normalizeOpenAiStreamDeltas,
+} = require("../../../utils/AiProviders/velaDispatch");
+const { repairMojibake } = require("../../../utils/helpers/mojibake");
 
 jest.mock("../../../utils/velaContext", () => ({
   VELA_API_URL: "http://127.0.0.1:7701",
@@ -23,6 +28,46 @@ describe("vela-dispatch provider connector", () => {
     expect(connector.className).toBe("VelaLLMConnector");
     expect(connector.model).toBe("gpt-4o-mini");
     expect(connector.streamingEnabled()).toBe(true);
+  });
+
+  it("repairMojibake fixes Windows-1252 apostrophe corruption", () => {
+    const broken = "I\u00e2\u20ac\u2122m Auto";
+    const fixed = repairMojibake(broken);
+    expect(fixed).toBe("I\u2019m Auto");
+    expect(fixed).not.toMatch(/\u00e2\u20ac/);
+  });
+
+  it("normalizeOpenAiStreamDeltas drops duplicate full-text chunks", async () => {
+    const full = "Hello. You\u2019re in Vela.";
+    async function* source() {
+      yield {
+        choices: [{ delta: { content: "Hello." }, finish_reason: null }],
+      };
+      yield {
+        choices: [{ delta: { content: full }, finish_reason: null }],
+      };
+      yield {
+        choices: [{ delta: { content: full }, finish_reason: "stop" }],
+      };
+    }
+
+    const parts = [];
+    for await (const chunk of normalizeOpenAiStreamDeltas(source())) {
+      const token = chunk?.choices?.[0]?.delta?.content;
+      if (token) parts.push(token);
+    }
+    expect(parts.join("")).toBe(full);
+  });
+
+  it("supportsNativeToolCalling is false for vela-dispatch (avoids AIbitat)", async () => {
+    const native = await Workspace.supportsNativeToolCalling({
+      chatProvider: "vela-dispatch",
+      chatModel: "composer-2.5-fast",
+      chatMode: "automatic",
+      velaProjectId: "proj-1",
+      velaRolePresetId: "cursor-developer",
+    });
+    expect(native).toBe(false);
   });
 
   it("getLLMProvider rejects vela-dispatch direct use", () => {

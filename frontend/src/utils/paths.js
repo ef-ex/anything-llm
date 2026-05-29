@@ -119,6 +119,12 @@ export default {
     llmPreference: () => {
       return "/settings/llm-preference";
     },
+    subscriptionAccess: () => {
+      return "/settings/subscription-access";
+    },
+    rolePresets: () => {
+      return "/settings/role-presets";
+    },
     transcriptionPreference: () => {
       return "/settings/transcription-preference";
     },

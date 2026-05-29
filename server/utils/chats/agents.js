@@ -44,6 +44,9 @@ async function grepAgents({
   thread = null,
   attachments = [],
 }) {
+  // Vela role presets always use the standard chat stream (M12 dispatch), not AIbitat agents.
+  if (workspace?.chatProvider === "vela-dispatch") return false;
+
   let nativeToolingEnabled = false;
 
   // If the workspace is in automatic mode, check if the workspace supports native tooling

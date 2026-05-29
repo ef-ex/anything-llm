@@ -367,6 +367,12 @@ const Workspace = {
       getBaseLLMProviderModel,
     } = require("../utils/helpers");
     const provider = workspace.chatProvider || process.env.LLM_PROVIDER || null;
+    if (provider === "vela-dispatch") {
+      const {
+        VelaLLMConnector,
+      } = require("../utils/AiProviders/velaDispatch");
+      return VelaLLMConnector.promptWindowLimit();
+    }
     const LLMProvider = getLLMProviderClass({ provider });
     const model =
       workspace.chatModel || getBaseLLMProviderModel({ provider }) || null;
@@ -685,6 +691,9 @@ const Workspace = {
       process.env.LLM_PROVIDER;
 
     if (!provider) return false;
+
+    // Vela dispatch uses resolveProviderConnector / VelaLLMConnector, not AIbitat.
+    if (provider === "vela-dispatch") return false;
 
     // Model router delegates to a resolved provider at chat time.
     // Check the router's fallback provider for tool calling support

@@ -285,6 +285,71 @@ function velaEndpoints(app) {
     }
   );
 
+  app.get(
+    "/vela/admin/role-presets",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (_request, response) => {
+      const result = await velaApiRequest("role-presets/manage");
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.get(
+    "/vela/admin/role-presets/:id",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      const { id } = request.params;
+      const result = await velaApiRequest(`role-presets/${encodeURIComponent(id)}`);
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.post(
+    "/vela/admin/role-presets",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      const result = await velaApiRequest("role-presets", {
+        method: "POST",
+        body: reqBody(request),
+      });
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.put(
+    "/vela/admin/role-presets/:id",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      const { id } = request.params;
+      const result = await velaApiRequest(`role-presets/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: reqBody(request),
+      });
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.delete(
+    "/vela/admin/role-presets/:id",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      const { id } = request.params;
+      const result = await velaApiRequest(`role-presets/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.get(
+    "/vela/admin/provider-profiles",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (_request, response) => {
+      const result = await velaApiRequest("provider-profiles");
+      sendVelaResult(response, result);
+    }
+  );
+
   app.post(
     "/workspace/:slug/vela/role-presets/resolve",
     [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
@@ -295,6 +360,82 @@ function velaEndpoints(app) {
         body: {
           role_id: body.role_id,
           required_capabilities: body.required_capabilities || [],
+        },
+      });
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.get(
+    "/workspace/:slug/vela/subscriptions/cursor/status",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      const projectId = request.query.project_id || workspace.velaProjectId;
+      const result = await velaApiRequest("subscriptions/cursor/status", {
+        query: projectId ? { project_id: projectId } : {},
+      });
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.post(
+    "/workspace/:slug/vela/subscriptions/cursor/refresh-models",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      const body = reqBody(request);
+      const result = await velaApiRequest("subscriptions/cursor/refresh-models", {
+        method: "POST",
+        body: {
+          project_id: body.project_id || workspace.velaProjectId || null,
+          force: body.force !== false,
+        },
+      });
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.post(
+    "/workspace/:slug/vela/subscriptions/cursor/connect",
+    [validatedRequest, flexUserRoleValid([ROLES.admin]), validWorkspaceSlug],
+    async (_request, response) => {
+      const result = await velaApiRequest("subscriptions/cursor/connect", {
+        method: "POST",
+        body: {},
+      });
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.post(
+    "/workspace/:slug/vela/subscriptions/cursor/disconnect",
+    [validatedRequest, flexUserRoleValid([ROLES.admin]), validWorkspaceSlug],
+    async (_request, response) => {
+      const result = await velaApiRequest("subscriptions/cursor/disconnect", {
+        method: "POST",
+        body: {},
+      });
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.post(
+    "/workspace/:slug/vela/subscriptions/cursor/test-dispatch",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      const body = reqBody(request);
+      const projectId = body.project_id || workspace.velaProjectId;
+      if (!projectId) {
+        return response.status(400).json({ error: "No Vela project bound to workspace" });
+      }
+      const result = await velaApiRequest("subscriptions/cursor/test-dispatch", {
+        method: "POST",
+        body: {
+          project_id: projectId,
+          role_id: body.role_id || "cursor-developer",
+          message: body.message || "Reply with exactly: cursor-ok",
         },
       });
       sendVelaResult(response, result);
@@ -366,6 +507,47 @@ function velaEndpoints(app) {
           workspace: updated,
           message,
           ...route,
+        });
+      } catch (e) {
+        console.error(e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
+  const CURSOR_COMPOSER_STANDARD = "cursor-acp/composer-2.5";
+  const CURSOR_COMPOSER_FAST = "cursor-acp/composer-2.5-fast";
+
+  app.post(
+    "/workspace/:slug/vela/cursor-composer-mode",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      try {
+        const user = await userFromSession(request, response);
+        const workspace = response.locals.workspace;
+        const body = reqBody(request);
+        const fast = body.fast === true || body.fast === "true";
+        const chatModel = fast ? CURSOR_COMPOSER_FAST : CURSOR_COMPOSER_STANDARD;
+
+        await Workspace.trackChange(
+          workspace,
+          { chatModel },
+          user
+        );
+        const { workspace: updated, message } = await Workspace.update(workspace.id, {
+          chatModel,
+        });
+
+        if (!updated) {
+          return response.status(500).json({
+            error: message || "Failed to save Composer model preference.",
+          });
+        }
+
+        return response.status(200).json({
+          workspace: updated,
+          chatModel,
+          fast,
         });
       } catch (e) {
         console.error(e);

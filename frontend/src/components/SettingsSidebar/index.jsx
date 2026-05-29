@@ -228,6 +228,18 @@ const SidebarOptions = ({ user = null, t }) => (
               roles: ["admin"],
             },
             {
+              btnText: "Subscription Access",
+              href: paths.settings.subscriptionAccess(),
+              flex: true,
+              roles: ["admin"],
+            },
+            {
+              btnText: "Studio Roles",
+              href: paths.settings.rolePresets(),
+              flex: true,
+              roles: ["admin"],
+            },
+            {
               btnText: t("settings.vector-database"),
               href: paths.settings.vectorDatabase(),
               flex: true,

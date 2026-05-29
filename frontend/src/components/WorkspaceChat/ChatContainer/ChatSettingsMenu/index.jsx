@@ -6,6 +6,7 @@ import TextSizeRow from "./TextSize";
 import MemoriesRow from "./Memories";
 import VelaEntitiesRow from "./VelaEntities";
 import VelaRolePresetRow from "./VelaRolePreset";
+import CursorComposerFastRow from "./CursorComposerFast";
 
 export default function ChatSettingsMenu({ workspaceSlug = null }) {
   const mode = useLoginMode();
@@ -64,6 +65,10 @@ export default function ChatSettingsMenu({ workspaceSlug = null }) {
         >
           <TextSizeRow />
           <VelaRolePresetRow
+            workspaceSlug={effectiveSlug}
+            onClose={() => setShowMenu(false)}
+          />
+          <CursorComposerFastRow
             workspaceSlug={effectiveSlug}
             onClose={() => setShowMenu(false)}
           />

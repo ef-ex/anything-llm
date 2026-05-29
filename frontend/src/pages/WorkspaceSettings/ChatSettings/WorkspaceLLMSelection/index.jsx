@@ -30,7 +30,18 @@ const LLM_DEFAULT = {
   requiredConfig: [],
 };
 
-const LLMS = [LLM_DEFAULT, ...AVAILABLE_LLM_PROVIDERS].filter(
+/** M12/M13: workspace uses Vela provider dispatch (not a stock AnythingLLM LLM). */
+const VELA_DISPATCH_LLM = {
+  name: "Vela subscription dispatch",
+  value: "vela-dispatch",
+  logo: AnythingLLMIcon,
+  options: () => <React.Fragment />,
+  description:
+    "Routes chat through Vela role presets and subscription providers (e.g. Cursor).",
+  requiredConfig: [],
+};
+
+const LLMS = [LLM_DEFAULT, VELA_DISPATCH_LLM, ...AVAILABLE_LLM_PROVIDERS].filter(
   (llm) => !DISABLED_PROVIDERS.includes(llm.value)
 );
 
@@ -69,7 +80,8 @@ export default function WorkspaceLLMSelection({
     );
     setFilteredLLMs(filtered);
   }, [LLMS, searchQuery, selectedLLM]);
-  const selectedLLMObject = LLMS.find((llm) => llm.value === selectedLLM);
+  const selectedLLMObject =
+    LLMS.find((llm) => llm.value === selectedLLM) ?? LLM_DEFAULT;
 
   return (
     <div className="border-b border-white/40 pb-8">
@@ -170,6 +182,10 @@ export default function WorkspaceLLMSelection({
 
 // TODO: Add this to agent selector as well as make generic component.
 function ModelSelector({ selectedLLM, workspace, setHasChanges }) {
+  if (selectedLLM === "vela-dispatch") {
+    return <VelaDispatchModelInfo workspace={workspace} />;
+  }
+
   if (selectedLLM === "anythingllm-router") {
     return (
       <RouterSelection workspace={workspace} setHasChanges={setHasChanges} />
@@ -206,6 +222,37 @@ function ModelSelector({ selectedLLM, workspace, setHasChanges }) {
       workspace={workspace}
       setHasChanges={setHasChanges}
     />
+  );
+}
+
+function VelaDispatchModelInfo({ workspace }) {
+  const roleId = workspace?.velaRolePresetId;
+  const modelId = workspace?.chatModel;
+  return (
+    <div className="mt-4 flex flex-col gap-y-2 text-sm text-white text-opacity-80">
+      <p>
+        Model and provider are chosen by the{" "}
+        <strong className="text-white">Vela role preset</strong> in the chat
+        sliders menu (not this LLM list).
+      </p>
+      {roleId ? (
+        <p className="font-mono text-xs text-zinc-300">
+          Role: {roleId}
+          {modelId ? ` · model: ${modelId}` : ""}
+        </p>
+      ) : (
+        <p className="text-orange-300 text-xs">
+          No role preset selected yet — open chat → sliders icon → Vela role
+          preset → Cursor Developer.
+        </p>
+      )}
+      <p className="text-xs text-zinc-400">
+        Studio Cursor status:{" "}
+        <Link to={paths.settings.subscriptionAccess()} className="underline text-primary-button">
+          Settings → Subscription Access
+        </Link>
+      </p>
+    </div>
   );
 }
 

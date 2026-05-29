@@ -129,6 +129,54 @@ const Vela = {
     return parseJson(res);
   },
 
+  listRolePresetsAdmin: async function () {
+    const res = await fetch(`${API_BASE}/vela/admin/role-presets`, {
+      headers: baseHeaders(),
+    });
+    return parseJson(res);
+  },
+
+  getRolePresetAdmin: async function (id) {
+    const res = await fetch(`${API_BASE}/vela/admin/role-presets/${encodeURIComponent(id)}`, {
+      headers: baseHeaders(),
+    });
+    return parseJson(res);
+  },
+
+  createRolePresetAdmin: async function (payload) {
+    const res = await fetch(`${API_BASE}/vela/admin/role-presets`, {
+      method: "POST",
+      headers: baseHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return parseJson(res);
+  },
+
+  updateRolePresetAdmin: async function (id, payload) {
+    const res = await fetch(`${API_BASE}/vela/admin/role-presets/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: baseHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return parseJson(res);
+  },
+
+  deleteRolePresetAdmin: async function (id) {
+    const res = await fetch(`${API_BASE}/vela/admin/role-presets/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: baseHeaders(),
+    });
+    if (res.status === 204) return { ok: true };
+    return parseJson(res);
+  },
+
+  listProviderProfilesAdmin: async function () {
+    const res = await fetch(`${API_BASE}/vela/admin/provider-profiles`, {
+      headers: baseHeaders(),
+    });
+    return parseJson(res);
+  },
+
   resolveRolePreset: async function (workspaceSlug, roleId, requiredCapabilities = []) {
     const res = await fetch(
       `${API_BASE}/workspace/${workspaceSlug}/vela/role-presets/resolve`,
@@ -139,6 +187,18 @@ const Vela = {
           role_id: roleId,
           required_capabilities: requiredCapabilities,
         }),
+      }
+    );
+    return parseJson(res);
+  },
+
+  setCursorComposerMode: async function (workspaceSlug, { fast = false } = {}) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/cursor-composer-mode`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify({ fast: !!fast }),
       }
     );
     return parseJson(res);
@@ -191,6 +251,61 @@ const Vela = {
       headers: baseHeaders(),
       body: JSON.stringify(payload),
     });
+    return parseJson(res);
+  },
+
+  cursorSubscriptionStatus: async function (workspaceSlug, { projectId = null } = {}) {
+    const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/subscriptions/cursor/status${qs}`,
+      { headers: baseHeaders() }
+    );
+    return parseJson(res);
+  },
+
+  cursorRefreshModels: async function (
+    workspaceSlug,
+    { projectId = null, force = true } = {}
+  ) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/subscriptions/cursor/refresh-models`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify({ project_id: projectId, force }),
+      }
+    );
+    return parseJson(res);
+  },
+
+  cursorConnect: async function (workspaceSlug) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/subscriptions/cursor/connect`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify({}),
+      }
+    );
+    return parseJson(res);
+  },
+
+  cursorTestDispatch: async function (
+    workspaceSlug,
+    { projectId = null, roleId = "cursor-developer", message } = {}
+  ) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/subscriptions/cursor/test-dispatch`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify({
+          project_id: projectId,
+          role_id: roleId,
+          message,
+        }),
+      }
+    );
     return parseJson(res);
   },
 };

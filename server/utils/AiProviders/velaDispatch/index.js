@@ -7,11 +7,84 @@ const {
   LLMPerformanceMonitor,
 } = require("../../helpers/chat/LLMPerformanceMonitor");
 const { VELA_API_URL } = require("../../velaContext");
+const { repairMojibake } = require("../../helpers/mojibake");
 
 const VELA_CHAT_TIMEOUT_MS = parseInt(
   process.env.VELA_CHAT_TIMEOUT_MS || "120000",
   10
 );
+
+/**
+ * Cursor / dispatch streams may repeat cumulative text or resend the full message on the
+ * last chunk. Normalize to incremental deltas before handleDefaultStreamResponseV2.
+ */
+async function* normalizeOpenAiStreamDeltas(stream) {
+  let emitted = "";
+  for await (const chunk of stream) {
+    const choice = chunk?.choices?.[0];
+    let deltaText = choice?.delta?.content;
+    if (typeof deltaText !== "string" || deltaText.length === 0) {
+      yield chunk;
+      continue;
+    }
+
+    deltaText = repairMojibake(deltaText);
+
+    const trimmedEmitted = emitted.trimEnd();
+    const trimmedDelta = deltaText.trimEnd();
+
+    let incremental = "";
+    if (!emitted) {
+      incremental = deltaText;
+      emitted = deltaText;
+    } else if (
+      deltaText === emitted ||
+      trimmedDelta === trimmedEmitted ||
+      emitted.includes(deltaText) ||
+      emitted.endsWith(deltaText)
+    ) {
+      incremental = "";
+    } else if (emitted.startsWith(deltaText)) {
+      incremental = "";
+    } else if (deltaText.startsWith(emitted)) {
+      incremental = deltaText.slice(emitted.length);
+      emitted = deltaText;
+    } else if (trimmedDelta.startsWith(trimmedEmitted)) {
+      incremental = deltaText.slice(trimmedEmitted.length);
+      emitted = deltaText;
+    } else if (deltaText.length > 40) {
+      let prefixLen = 0;
+      const max = Math.min(emitted.length, deltaText.length);
+      while (prefixLen < max && emitted[prefixLen] === deltaText[prefixLen]) {
+        prefixLen++;
+      }
+      if (
+        prefixLen >= Math.min(emitted.length, deltaText.length) - 2 ||
+        prefixLen > emitted.length * 0.6
+      ) {
+        incremental = "";
+      } else {
+        incremental = deltaText;
+        emitted += deltaText;
+      }
+    } else {
+      incremental = deltaText;
+      emitted += deltaText;
+    }
+
+    if (!incremental) continue;
+
+    yield {
+      ...chunk,
+      choices: [
+        {
+          ...choice,
+          delta: { ...choice.delta, content: incremental },
+        },
+      ],
+    };
+  }
+}
 
 async function* parseOpenAiSseStream(responseBody) {
   const reader = responseBody.getReader();
@@ -139,7 +212,8 @@ class VelaLLMConnector {
   }
 
   #dispatchPayload(messages, { temperature, stream }) {
-    return {
+    const modelId = this.model || this.workspace?.chatModel || null;
+    const payload = {
       project_id: this.workspace.velaProjectId,
       role_id: this.workspace.velaRolePresetId,
       workspace_id: String(this.workspace.id),
@@ -149,6 +223,10 @@ class VelaLLMConnector {
         stream: !!stream,
       },
     };
+    if (modelId && modelId !== "vela-dispatch") {
+      payload.model_id = modelId;
+    }
+    return payload;
   }
 
   async #velaFetch(path, body, { stream = false } = {}) {
@@ -201,7 +279,7 @@ class VelaLLMConnector {
 
     const payload = result.output;
     return {
-      textResponse: payload.content || "",
+      textResponse: repairMojibake(payload.content || ""),
       metrics: {
         prompt_tokens: payload.usage?.prompt_tokens || 0,
         completion_tokens: payload.usage?.completion_tokens || 0,
@@ -230,10 +308,14 @@ class VelaLLMConnector {
       throw new Error(await this.#parseDispatchError(resp));
     }
 
-    const iterator = parseOpenAiSseStream(resp.body);
+    const rawStream = {
+      [Symbol.asyncIterator]() {
+        return parseOpenAiSseStream(resp.body);
+      },
+    };
     const stream = {
       [Symbol.asyncIterator]() {
-        return iterator;
+        return normalizeOpenAiStreamDeltas(rawStream);
       },
     };
 
@@ -259,4 +341,4 @@ class VelaLLMConnector {
   }
 }
 
-module.exports = { VelaLLMConnector };
+module.exports = { VelaLLMConnector, normalizeOpenAiStreamDeltas };
