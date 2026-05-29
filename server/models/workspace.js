@@ -684,6 +684,8 @@ const Workspace = {
       workspace?.chatProvider ??
       process.env.LLM_PROVIDER;
 
+    if (!provider) return false;
+
     // Model router delegates to a resolved provider at chat time.
     // Check the router's fallback provider for tool calling support
     // as a reasonable proxy for the router's capabilities.
@@ -696,7 +698,7 @@ const Workspace = {
           : null);
       if (!routerId) return false;
       const router = await ModelRouter.get({ id: routerId });
-      if (!router) return false;
+      if (!router?.fallback_provider) return false;
       const fallbackConfig = {
         provider: router.fallback_provider,
         model: router.fallback_model,
