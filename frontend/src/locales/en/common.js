@@ -1631,6 +1631,18 @@ const TRANSLATIONS = {
       run_publish: "Publish via API",
       insert_reference: "Insert into chat",
     },
+    vela_role_presets: {
+      title: "Studio role",
+      label: "Studio role",
+      none: "No role selected",
+      loading: "Loading roles…",
+      no_workspace: "Open a workspace to choose a role.",
+      not_configured: "Set VELA_API_URL on the AnythingLLM server.",
+      unavailable:
+        "Vela backend is not reachable. Start the Vela candidate on port 7701.",
+      error: "Could not load studio roles.",
+      route_summary: "{{model}} · context {{depth}}",
+    },
   },
   profile_settings: {
     edit_account: "Edit Account",

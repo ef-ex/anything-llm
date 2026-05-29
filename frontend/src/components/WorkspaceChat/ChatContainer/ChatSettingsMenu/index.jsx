@@ -1,12 +1,16 @@
 import { useState, useRef, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { SlidersHorizontal } from "@phosphor-icons/react";
 import useLoginMode from "@/hooks/useLoginMode";
 import TextSizeRow from "./TextSize";
 import MemoriesRow from "./Memories";
 import VelaEntitiesRow from "./VelaEntities";
+import VelaRolePresetRow from "./VelaRolePreset";
 
-export default function ChatSettingsMenu() {
+export default function ChatSettingsMenu({ workspaceSlug = null }) {
   const mode = useLoginMode();
+  const { slug: routeSlug } = useParams();
+  const effectiveSlug = workspaceSlug || routeSlug;
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
   const buttonRef = useRef(null);
@@ -56,9 +60,13 @@ export default function ChatSettingsMenu() {
       {showMenu && (
         <div
           ref={menuRef}
-          className="absolute right-0 top-[42px] bg-zinc-800 light:bg-slate-50 border border-zinc-700 light:border-slate-300 rounded-lg p-3.5 w-[226px] flex flex-col gap-1.5 shadow-lg"
+          className="absolute right-0 top-[42px] bg-zinc-800 light:bg-slate-50 border border-zinc-700 light:border-slate-300 rounded-lg p-3.5 w-[280px] flex flex-col gap-1.5 shadow-lg"
         >
           <TextSizeRow />
+          <VelaRolePresetRow
+            workspaceSlug={effectiveSlug}
+            onClose={() => setShowMenu(false)}
+          />
           <VelaEntitiesRow onClose={() => setShowMenu(false)} />
           <MemoriesRow onClose={() => setShowMenu(false)} />
         </div>

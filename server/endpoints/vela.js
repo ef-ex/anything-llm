@@ -192,6 +192,8 @@ function velaEndpoints(app) {
           workspace_project_id: workspace.velaProjectId || null,
           include_media: !!body.include_media,
           default_facet: body.default_facet || "brief",
+          role_preset_id:
+            body.role_preset_id || workspace.velaRolePresetId || null,
         },
       });
       sendVelaResult(response, result);
@@ -248,6 +250,81 @@ function velaEndpoints(app) {
         },
       });
       sendVelaResult(response, result);
+    }
+  );
+
+  app.get(
+    "/workspace/:slug/vela/role-presets",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (_request, response) => {
+      const result = await velaApiRequest("role-presets");
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.post(
+    "/workspace/:slug/vela/role-presets/resolve",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const body = reqBody(request);
+      const result = await velaApiRequest("role-presets/resolve", {
+        method: "POST",
+        body: {
+          role_id: body.role_id,
+          required_capabilities: body.required_capabilities || [],
+        },
+      });
+      sendVelaResult(response, result);
+    }
+  );
+
+  app.post(
+    "/workspace/:slug/vela/role-preset",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      try {
+        const user = await userFromSession(request, response);
+        const workspace = response.locals.workspace;
+        const { role_id: roleId } = reqBody(request);
+        if (!roleId) {
+          return response.status(400).json({ error: "role_id is required" });
+        }
+
+        const routeResult = await velaApiRequest("role-presets/resolve", {
+          method: "POST",
+          body: { role_id: roleId },
+        });
+        if (!routeResult.ok) {
+          return sendVelaResult(response, routeResult);
+        }
+
+        const route = routeResult.data;
+        await Workspace.trackChange(
+          workspace,
+          {
+            velaRolePresetId: roleId,
+            chatProvider: route.chat_provider,
+            chatModel: route.model_id,
+            router_id: null,
+          },
+          user
+        );
+        const { workspace: updated, message } = await Workspace.update(workspace.id, {
+          velaRolePresetId: roleId,
+          chatProvider: route.chat_provider,
+          chatModel: route.model_id,
+          router_id: null,
+        });
+
+        response.status(200).json({
+          workspace: updated,
+          message,
+          ...route,
+        });
+      } catch (e) {
+        console.error(e);
+        response.sendStatus(500).end();
+      }
     }
   );
 }

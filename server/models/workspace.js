@@ -31,6 +31,7 @@ function isNullOrNaN(value) {
  * @property {string} queryRefusalResponse - The query refusal response of the workspace
  * @property {string} vectorSearchMode - The vector search mode of the workspace
  * @property {string|null} velaProjectId - Bound Vela project ID for context resolution
+ * @property {string|null} velaRolePresetId - Selected Vela role preset for model routing
  */
 
 const Workspace = {
@@ -59,6 +60,7 @@ const Workspace = {
     "vectorSearchMode",
     "router_id",
     "velaProjectId",
+    "velaRolePresetId",
   ],
 
   validations: {
@@ -141,6 +143,12 @@ const Workspace = {
       return id;
     },
     velaProjectId: (value) => {
+      if ([null, undefined, "", "none"].includes(value)) return null;
+      if (typeof value !== "string") return null;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed.slice(0, 255) : null;
+    },
+    velaRolePresetId: (value) => {
       if ([null, undefined, "", "none"].includes(value)) return null;
       if (typeof value !== "string") return null;
       const trimmed = value.trim();

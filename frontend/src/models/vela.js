@@ -98,14 +98,59 @@ const Vela = {
 
   resolveReferences: async function (
     workspaceSlug,
-    { references, include_media = false, default_facet = "brief" } = {}
+    {
+      references,
+      include_media = false,
+      default_facet = "brief",
+      role_preset_id = null,
+    } = {}
   ) {
     const res = await fetch(
       `${API_BASE}/workspace/${workspaceSlug}/vela/entities/resolve`,
       {
         method: "POST",
         headers: baseHeaders(),
-        body: JSON.stringify({ references, include_media, default_facet }),
+        body: JSON.stringify({
+          references,
+          include_media,
+          default_facet,
+          role_preset_id,
+        }),
+      }
+    );
+    return parseJson(res);
+  },
+
+  listRolePresets: async function (workspaceSlug) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/role-presets`,
+      { headers: baseHeaders() }
+    );
+    return parseJson(res);
+  },
+
+  resolveRolePreset: async function (workspaceSlug, roleId, requiredCapabilities = []) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/role-presets/resolve`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify({
+          role_id: roleId,
+          required_capabilities: requiredCapabilities,
+        }),
+      }
+    );
+    return parseJson(res);
+  },
+
+  applyRolePreset: async function (workspaceSlug, roleId) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/role-preset`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify({ role_id: roleId }),
       }
     );
     return parseJson(res);
