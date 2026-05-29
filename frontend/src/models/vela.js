@@ -153,7 +153,15 @@ const Vela = {
         body: JSON.stringify({ role_id: roleId }),
       }
     );
-    return parseJson(res);
+    const data = await parseJson(res);
+    if (!data?.workspace?.velaRolePresetId) {
+      throw new Error(
+        data?.error ||
+          data?.message ||
+          "Role was not saved on the workspace. Try restarting AnythingLLM after running launch-dev migrations."
+      );
+    }
+    return data;
   },
 
   resolveFilePath: async function (

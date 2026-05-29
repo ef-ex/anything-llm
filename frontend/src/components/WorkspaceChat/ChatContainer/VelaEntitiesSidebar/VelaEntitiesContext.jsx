@@ -172,6 +172,7 @@ export function VelaEntitiesProvider({ workspace, onWorkspaceUpdate, children })
 
   async function setUserDefault(projectId) {
     if (!slug) return;
+    setError(null);
     try {
       await Vela.setUserDefaultProject(slug, projectId);
       await refreshProjects();

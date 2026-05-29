@@ -77,10 +77,18 @@ async function velaApiRequest(path, opts = {}) {
  */
 function sendVelaResult(response, result) {
   if (result.ok) {
+    if (result.status === 204) {
+      response.status(204).end();
+      return;
+    }
     response.status(result.status).json(result.data ?? {});
     return;
   }
-  response.status(result.status).json({ error: result.error, detail: result.data });
+  const detail =
+    result.data && typeof result.data === "object" && result.data.detail
+      ? result.data.detail
+      : result.data;
+  response.status(result.status).json({ error: result.error, detail });
 }
 
 /**

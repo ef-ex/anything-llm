@@ -73,7 +73,7 @@ function velaEndpoints(app) {
 
   app.post(
     "/workspace/:slug/vela/workspace-project",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager]), validWorkspaceSlug],
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -84,6 +84,29 @@ function velaEndpoints(app) {
         const { workspace: updated, message } = await Workspace.update(workspace.id, {
           velaProjectId,
         });
+        if (!updated) {
+          return response.status(500).json({
+            error:
+              message ||
+              "Failed to save project on workspace. Run database migrations (see launch-dev.ps1).",
+          });
+        }
+
+        if (velaProjectId) {
+          const grantResult = await velaApiRequest(
+            `projects/${velaProjectId}/grant-access`,
+            {
+              method: "POST",
+              query: { user_id: velaUserId(user) },
+            }
+          );
+          if (!grantResult.ok) {
+            console.warn(
+              `[vela] grant-access skipped for project ${velaProjectId}: ${grantResult.error}`
+            );
+          }
+        }
+
         response.status(200).json({ workspace: updated, message });
       } catch (e) {
         console.error(e);
@@ -303,7 +326,7 @@ function velaEndpoints(app) {
           workspace,
           {
             velaRolePresetId: roleId,
-            chatProvider: route.chat_provider,
+            chatProvider: "vela-dispatch",
             chatModel: route.model_id,
             router_id: null,
           },
@@ -311,10 +334,33 @@ function velaEndpoints(app) {
         );
         const { workspace: updated, message } = await Workspace.update(workspace.id, {
           velaRolePresetId: roleId,
-          chatProvider: route.chat_provider,
+          chatProvider: "vela-dispatch",
           chatModel: route.model_id,
           router_id: null,
         });
+
+        if (!updated) {
+          return response.status(500).json({
+            error:
+              message ||
+              "Failed to save role on workspace. Run database migrations (see launch-dev.ps1).",
+          });
+        }
+
+        if (workspace.velaProjectId) {
+          const grantResult = await velaApiRequest(
+            `projects/${workspace.velaProjectId}/grant-access`,
+            {
+              method: "POST",
+              query: { user_id: velaUserId(user) },
+            }
+          );
+          if (!grantResult.ok) {
+            console.warn(
+              `[vela] grant-access skipped for project ${workspace.velaProjectId}: ${grantResult.error}`
+            );
+          }
+        }
 
         response.status(200).json({
           workspace: updated,

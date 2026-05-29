@@ -260,6 +260,10 @@ function getLLMProvider({ provider = null, model = null } = {}) {
       throw new Error(
         "anythingllm-router provider must be resolved via AnythingLLMModelRouter class, not getLLMProvider directly."
       );
+    case "vela-dispatch":
+      throw new Error(
+        "vela-dispatch provider must be resolved via resolveProviderConnector, not getLLMProvider directly."
+      );
     default:
       throw new Error(
         `ENV: No valid LLM_PROVIDER value found in environment! Using ${process.env.LLM_PROVIDER}`
@@ -650,6 +654,18 @@ async function resolveProviderConnector({
   apiSessionId = null,
 }) {
   const effectiveProvider = workspace?.chatProvider || process.env.LLM_PROVIDER;
+
+  if (effectiveProvider === "vela-dispatch") {
+    const { VelaLLMConnector } = require("../AiProviders/velaDispatch");
+    return {
+      connector: new VelaLLMConnector({
+        workspace,
+        modelPreference: workspace?.chatModel,
+      }),
+      routingMetadata: null,
+      prefetchedContext: null,
+    };
+  }
 
   if (effectiveProvider !== "anythingllm-router") {
     return {
