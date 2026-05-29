@@ -30,6 +30,7 @@ function isNullOrNaN(value) {
  * @property {string} agentModel - The agent model of the workspace
  * @property {string} queryRefusalResponse - The query refusal response of the workspace
  * @property {string} vectorSearchMode - The vector search mode of the workspace
+ * @property {string|null} velaProjectId - Bound Vela project ID for context resolution
  */
 
 const Workspace = {
@@ -57,6 +58,7 @@ const Workspace = {
     "queryRefusalResponse",
     "vectorSearchMode",
     "router_id",
+    "velaProjectId",
   ],
 
   validations: {
@@ -137,6 +139,12 @@ const Workspace = {
       const id = Number(value);
       if (isNaN(id)) return null;
       return id;
+    },
+    velaProjectId: (value) => {
+      if ([null, undefined, "", "none"].includes(value)) return null;
+      if (typeof value !== "string") return null;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed.slice(0, 255) : null;
     },
   },
 

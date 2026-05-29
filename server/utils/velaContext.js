@@ -6,7 +6,7 @@
  *
  * Controlled by environment variables:
  *   VELA_API_URL — base URL of the Vela backend (e.g., http://127.0.0.1:7700)
- *   VELA_PROJECT_ID — optional project ID to scope context to
+ *   VELA_PROJECT_ID — optional dev/bootstrap fallback (resolved server-side)
  */
 
 const VELA_API_URL = process.env.VELA_API_URL || null;
@@ -51,8 +51,11 @@ function resetVelaAvailability() {
 /**
  * Fetch context from the Vela backend.
  *
+ * Active project resolution happens server-side. Pass workspace.velaProjectId
+ * as projectId; do not apply VELA_PROJECT_ID client-side (backend fallback only).
+ *
  * @param {Object} [opts]
- * @param {string} [opts.projectId] — project ID override
+ * @param {string|null} [opts.projectId] — workspace.velaProjectId binding
  * @param {string} [opts.userId] — user ID for permission resolution
  * @param {string} [opts.sessionId] — chat session ID
  * @param {boolean} [opts.includeRules=true] — include rules in context
@@ -67,7 +70,7 @@ async function fetchVelaContext(opts = {}) {
   if (!available) return null;
 
   const body = {
-    project_id: opts.projectId || VELA_PROJECT_ID || null,
+    project_id: opts.projectId ?? null,
     user_id: opts.userId || null,
     session_id: opts.sessionId || null,
     include_rules: opts.includeRules !== false,
@@ -112,6 +115,15 @@ function buildContextPrefix(context) {
   if (!context) return "";
 
   const parts = [];
+
+  if (context.no_active_project) {
+    parts.push(
+      "[Vela — No Active Project]\n" +
+        "No Vela project is bound to this workspace. " +
+        "Project rules, metadata, and write scope are unavailable until " +
+        "workspace.velaProjectId is set or a user default project is configured."
+    );
+  }
 
   // Permission boundary (always include if available)
   if (context.permission_scope?.boundary_summary) {
