@@ -28,6 +28,7 @@ import WorkspaceModelPicker from "@/components/WorkspaceChat/ChatContainer/Works
 import { ChatTooltips } from "@/components/WorkspaceChat/ChatContainer/ChatTooltips";
 import { ChatSidebarProvider } from "@/components/WorkspaceChat/ChatContainer/ChatSidebar";
 import MemoriesSidebar from "@/components/WorkspaceChat/ChatContainer/MemoriesSidebar";
+import VelaEntitiesSidebar from "@/components/WorkspaceChat/ChatContainer/VelaEntitiesSidebar";
 
 async function getTargetWorkspace() {
   const lastVisited = safeJsonParse(
@@ -324,6 +325,10 @@ function HomeContent({ workspace, setWorkspace, threadSlug, setThreadSlug }) {
           <ChatTooltips />
         </div>
         <MemoriesSidebar workspace={workspace} />
+        <VelaEntitiesSidebar
+          workspace={workspace}
+          onWorkspaceUpdate={setWorkspace}
+        />
       </div>
     </ChatSidebarProvider>
   );

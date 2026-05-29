@@ -36,6 +36,7 @@ import WorkspaceModelPicker from "./WorkspaceModelPicker";
 import { ChatSidebarProvider } from "./ChatSidebar";
 import SourcesSidebar from "./SourcesSidebar";
 import MemoriesSidebar from "./MemoriesSidebar";
+import VelaEntitiesSidebar from "./VelaEntitiesSidebar";
 
 export default function ChatContainer({
   workspace,
@@ -44,6 +45,10 @@ export default function ChatContainer({
 }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const [activeWorkspace, setActiveWorkspace] = useState(workspace);
+  useEffect(() => {
+    setActiveWorkspace(workspace);
+  }, [workspace]);
   const [loadingResponse, setLoadingResponse] = useState(false);
   const [chatHistory, setChatHistory] = useState(knownHistory);
   const [socketId, setSocketId] = useState(null);
@@ -448,6 +453,10 @@ export default function ChatContainer({
             <ChatTooltips />
           </div>
           <MemoriesSidebar workspace={workspace} />
+          <VelaEntitiesSidebar
+            workspace={activeWorkspace}
+            onWorkspaceUpdate={setActiveWorkspace}
+          />
         </div>
       </ChatSidebarProvider>
     );
@@ -492,6 +501,10 @@ export default function ChatContainer({
         </div>
         <SourcesSidebar />
         <MemoriesSidebar workspace={workspace} />
+        <VelaEntitiesSidebar
+          workspace={activeWorkspace}
+          onWorkspaceUpdate={setActiveWorkspace}
+        />
       </div>
     </ChatSidebarProvider>
   );

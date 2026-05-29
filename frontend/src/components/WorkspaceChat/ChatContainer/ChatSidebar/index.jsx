@@ -61,6 +61,16 @@ export function useMemoriesSidebar() {
   };
 }
 
+export function useVelaEntitiesSidebar() {
+  const { activeSidebar, toggleSidebar, closeSidebar } =
+    useContext(ChatSidebarContext);
+  return {
+    sidebarOpen: activeSidebar === "vela-entities",
+    toggleSidebar: () => toggleSidebar("vela-entities"),
+    closeSidebar,
+  };
+}
+
 /**
  * Reusable animation wrapper for right-side chat panels.
  * Handles the slide-in/out transition only; each panel provides its own layout.
