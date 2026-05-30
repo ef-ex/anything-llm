@@ -519,6 +519,132 @@ function velaEndpoints(app) {
   const CURSOR_COMPOSER_FAST = "cursor-acp/composer-2.5-fast";
 
   app.post(
+    "/workspace/:slug/vela/orchestrator/runs",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      const body = reqBody(request);
+      const projectId = body.project_id || workspace.velaProjectId;
+      if (!projectId) {
+        return response.status(400).json({ error: "No Vela project bound to workspace" });
+      }
+      const result = await velaApiRequest("orchestrator/runs", {
+        method: "POST",
+        body: {
+          ...body,
+          project_id: projectId,
+          workspace_id: body.workspace_id || workspace.slug,
+        },
+      });
+      return sendVelaResult(response, result);
+    }
+  );
+
+  app.get(
+    "/workspace/:slug/vela/orchestrator/runs",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      const projectId = request.query.project_id || workspace.velaProjectId;
+      if (!projectId) {
+        return response.status(400).json({ error: "No Vela project bound to workspace" });
+      }
+      const result = await velaApiRequest("orchestrator/runs", {
+        query: {
+          project_id: projectId,
+          workspace_id: request.query.workspace_id || workspace.slug,
+          session_id: request.query.session_id || undefined,
+          limit: request.query.limit || undefined,
+        },
+      });
+      return sendVelaResult(response, result);
+    }
+  );
+
+  app.get(
+    "/workspace/:slug/vela/orchestrator/runs/:runId",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const { runId } = request.params;
+      const result = await velaApiRequest(`orchestrator/runs/${encodeURIComponent(runId)}`, {
+        query: {
+          include_events: request.query.include_events ?? "true",
+        },
+      });
+      return sendVelaResult(response, result);
+    }
+  );
+
+  app.post(
+    "/workspace/:slug/vela/orchestrator/runs/:runId/resume",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const { runId } = request.params;
+      const body = reqBody(request);
+      const result = await velaApiRequest(
+        `orchestrator/runs/${encodeURIComponent(runId)}/resume`,
+        { method: "POST", body }
+      );
+      return sendVelaResult(response, result);
+    }
+  );
+
+  app.post(
+    "/workspace/:slug/vela/orchestrator/writeback",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      try {
+        const user = await userFromSession(request, response);
+        const workspace = response.locals.workspace;
+        const body = reqBody(request);
+        const prompt = String(body.user_message || "").trim();
+        const assistantText = String(body.assistant_message || "").trim();
+        if (!prompt || !assistantText) {
+          return response.status(400).json({ error: "user_message and assistant_message are required" });
+        }
+
+        const { WorkspaceChats } = require("../models/workspaceChats");
+        const { WorkspaceThread } = require("../models/workspaceThread");
+        let threadId = null;
+        if (body.thread_slug) {
+          const thread = await WorkspaceThread.get({
+            slug: body.thread_slug,
+            workspace_id: workspace.id,
+          });
+          threadId = thread?.id ?? null;
+        }
+
+        const { chat, message } = await WorkspaceChats.new({
+          workspaceId: workspace.id,
+          prompt,
+          response: {
+            text: assistantText,
+            sources: [],
+            type: workspace.chatMode || "chat",
+            metrics: body.metrics || {},
+            attachments: body.attachments || [],
+          },
+          user,
+          threadId,
+        });
+
+        if (!chat) {
+          return response.status(500).json({ error: message || "Failed to save chat" });
+        }
+
+        return response.status(201).json({
+          chatId: chat.id,
+          prompt,
+          assistant_message: assistantText,
+        });
+      } catch (e) {
+        console.error(e);
+        return response.sendStatus(500);
+      }
+    }
+  );
+
+  app.post(
     "/workspace/:slug/vela/cursor-composer-mode",
     [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
     async (request, response) => {

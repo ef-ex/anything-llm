@@ -26,6 +26,7 @@ import useTextSize from "@/hooks/useTextSize";
 import useChatHistoryScrollHandle from "@/hooks/useChatHistoryScrollHandle";
 import { ThoughtExpansionProvider } from "./ThoughtContainer";
 import { MessageActionsProvider } from "./MessageActionsContext";
+import OrchestratorRunCard from "../OrchestratorRunCard";
 
 export default forwardRef(function (
   {
@@ -35,6 +36,9 @@ export default forwardRef(function (
     updateHistory,
     regenerateAssistantMessage,
     websocket = null,
+    orchestratorRuns = {},
+    onOrchestratorResume = null,
+    resumingRunId = null,
   },
   ref
 ) {
@@ -186,6 +190,9 @@ export default forwardRef(function (
         saveEditedMessage,
         forkThread,
         websocket,
+        orchestratorRuns,
+        onOrchestratorResume,
+        resumingRunId,
       }),
     [
       workspace,
@@ -194,6 +201,9 @@ export default forwardRef(function (
       saveEditedMessage,
       forkThread,
       websocket,
+      orchestratorRuns,
+      onOrchestratorResume,
+      resumingRunId,
     ]
   );
   const lastMessageInfo = useMemo(() => getLastMessageInfo(history), [history]);
@@ -282,6 +292,9 @@ function buildMessages({
   saveEditedMessage,
   forkThread,
   websocket,
+  orchestratorRuns = {},
+  onOrchestratorResume = null,
+  resumingRunId = null,
 }) {
   return history.reduce((acc, props, index) => {
     const isLastBotReply =
@@ -382,6 +395,20 @@ function buildMessages({
           clarifyingQuestions={props.clarifyingQuestions}
         />
       );
+      if (props.role === "user") {
+        const parentKey = props.uuid || (props.chatId ? String(props.chatId) : null);
+        const run = parentKey ? orchestratorRuns[parentKey] : null;
+        if (run) {
+          acc.push(
+            <OrchestratorRunCard
+              key={`orch-${run.run_id}`}
+              run={run}
+              onResume={onOrchestratorResume}
+              resuming={resumingRunId === run.run_id}
+            />
+          );
+        }
+      }
     }
     return acc;
   }, []);

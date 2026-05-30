@@ -37,6 +37,8 @@ import { ChatSidebarProvider } from "./ChatSidebar";
 import SourcesSidebar from "./SourcesSidebar";
 import MemoriesSidebar from "./MemoriesSidebar";
 import VelaEntitiesSidebar from "./VelaEntitiesSidebar";
+import useOrchestratorChat from "@/hooks/useOrchestratorChat";
+import Vela from "@/models/vela";
 
 export default function ChatContainer({
   workspace,
@@ -57,6 +59,17 @@ export default function ChatContainer({
   const { chatHistoryRef } = useChatContainerQuickScroll();
   const pendingMessageChecked = useRef(false);
   const pendingResetRef = useRef(false);
+  const orchestratorMode = !!workspace?.velaProjectId;
+  const {
+    runsByParentId,
+    resumingRunId,
+    submitOrchestratorPrompt,
+    resumeRun,
+  } = useOrchestratorChat({
+    workspace,
+    threadSlug,
+    enabled: orchestratorMode,
+  });
 
   const isEmpty =
     chatHistory.length === 0 && !sessionStorage.getItem(PENDING_HOME_MESSAGE);
@@ -108,21 +121,25 @@ export default function ChatContainer({
     // PromptInput remounts (empty→chat transition), it won't restore stale text
     clearPromptInputDraft(threadSlug ?? workspace.slug);
 
-    const prevChatHistory = [
-      ...chatHistory,
-      {
-        content: currentMessage,
-        role: "user",
-        attachments: parseAttachments(),
-      },
-      {
-        content: "",
-        role: "assistant",
-        pending: true,
-        userMessage: currentMessage,
-        animate: true,
-      },
-    ];
+    const userEntry = {
+      uuid: v4(),
+      content: currentMessage,
+      role: "user",
+      attachments: parseAttachments(),
+    };
+    const prevChatHistory = orchestratorMode
+      ? [...chatHistory, userEntry]
+      : [
+          ...chatHistory,
+          userEntry,
+          {
+            content: "",
+            role: "assistant",
+            pending: true,
+            userMessage: currentMessage,
+            animate: true,
+          },
+        ];
 
     if (listening) {
       // Stop the mic if the send button is clicked
@@ -216,22 +233,26 @@ export default function ChatContainer({
         },
       ];
     } else {
-      prevChatHistory = [
-        ...chatHistory,
-        {
-          content: text,
-          role: "user",
-          attachments,
-        },
-        {
-          content: "",
-          role: "assistant",
-          pending: true,
-          userMessage: text,
-          attachments,
-          animate: true,
-        },
-      ];
+      const userEntry = {
+        uuid: v4(),
+        content: text,
+        role: "user",
+        attachments,
+      };
+      prevChatHistory = orchestratorMode
+        ? [...chatHistory, userEntry]
+        : [
+            ...chatHistory,
+            userEntry,
+            {
+              content: "",
+              role: "assistant",
+              pending: true,
+              userMessage: text,
+              attachments,
+              animate: true,
+            },
+          ];
     }
 
     setChatHistory(prevChatHistory);
@@ -262,6 +283,57 @@ export default function ChatContainer({
         chatHistory.length > 0 ? chatHistory[chatHistory.length - 1] : null;
       const remHistory = chatHistory.length > 0 ? chatHistory.slice(0, -1) : [];
       var _chatHistory = [...remHistory];
+
+      if (orchestratorMode && promptMessage?.role === "user" && promptMessage?.content) {
+        const parentId = promptMessage.uuid || String(promptMessage.chatId || v4());
+        const userText = promptMessage.content;
+        const attachments = promptMessage.attachments ?? parseAttachments();
+        try {
+          const finalRun = await submitOrchestratorPrompt({
+            userText,
+            parentMessageId: parentId,
+            history: remHistory,
+            attachments,
+          });
+          if (finalRun?.status === "completed" && finalRun.output_text) {
+            const writeback = await Vela.writebackOrchestratorChat(workspace.slug, {
+              userMessage: userText,
+              assistantMessage: finalRun.output_text,
+              threadSlug,
+              attachments,
+            });
+            setChatHistory((prev) => [
+              ...prev.filter((m) => !m.pending),
+              {
+                uuid: v4(),
+                role: "assistant",
+                content: finalRun.output_text,
+                chatId: writeback?.chatId,
+                closed: true,
+                pending: false,
+              },
+            ]);
+          } else {
+            setChatHistory((prev) => prev.filter((m) => !m.pending));
+          }
+        } catch (err) {
+          console.error(err);
+          setChatHistory((prev) => [
+            ...prev.filter((m) => !m.pending),
+            {
+              uuid: v4(),
+              type: "abort",
+              role: "assistant",
+              content: err.message || "Orchestrator request failed.",
+              closed: true,
+              error: err.message,
+              pending: false,
+            },
+          ]);
+        }
+        setLoadingResponse(false);
+        return;
+      }
 
       // Override hook for new messages to now go to agents until the connection closes
       if (!!websocket) {
@@ -309,7 +381,14 @@ export default function ChatContainer({
       return;
     }
     loadingResponse === true && fetchReply();
-  }, [loadingResponse, chatHistory, workspace]);
+  }, [
+    loadingResponse,
+    chatHistory,
+    workspace,
+    orchestratorMode,
+    submitOrchestratorPrompt,
+    threadSlug,
+  ]);
 
   // TODO: Simplify this WSS stuff
   useEffect(() => {
@@ -484,6 +563,43 @@ export default function ChatContainer({
                     updateHistory={setChatHistory}
                     regenerateAssistantMessage={regenerateAssistantMessage}
                     websocket={websocket}
+                    orchestratorRuns={runsByParentId}
+                    onOrchestratorResume={async (run, answer) => {
+                      setLoadingResponse(true);
+                      const finalRun = await resumeRun(run, answer);
+                      if (
+                        finalRun?.status === "completed" &&
+                        finalRun.output_text
+                      ) {
+                        const userMsg = chatHistory.find(
+                          (m) =>
+                            (m.uuid || String(m.chatId)) ===
+                            (run.parent_message_id || finalRun.parent_message_id)
+                        );
+                        const userText = userMsg?.content || "";
+                        const writeback = await Vela.writebackOrchestratorChat(
+                          workspace.slug,
+                          {
+                            userMessage: userText,
+                            assistantMessage: finalRun.output_text,
+                            threadSlug,
+                          }
+                        );
+                        setChatHistory((prev) => [
+                          ...prev.filter((m) => !m.pending),
+                          {
+                            uuid: v4(),
+                            role: "assistant",
+                            content: finalRun.output_text,
+                            chatId: writeback?.chatId,
+                            closed: true,
+                            pending: false,
+                          },
+                        ]);
+                      }
+                      setLoadingResponse(false);
+                    }}
+                    resumingRunId={resumingRunId}
                   />
                 </MetricsProvider>
                 <PromptInput

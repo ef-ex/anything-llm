@@ -290,6 +290,74 @@ const Vela = {
     return parseJson(res);
   },
 
+  createOrchestratorRun: async function (workspaceSlug, payload) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/orchestrator/runs`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify(payload),
+      }
+    );
+    return parseJson(res);
+  },
+
+  listOrchestratorRuns: async function (
+    workspaceSlug,
+    { projectId = null, sessionId = null, limit = 50 } = {}
+  ) {
+    const params = new URLSearchParams();
+    if (projectId) params.set("project_id", projectId);
+    if (sessionId) params.set("session_id", sessionId);
+    if (limit) params.set("limit", String(limit));
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/orchestrator/runs?${params}`,
+      { headers: baseHeaders() }
+    );
+    return parseJson(res);
+  },
+
+  getOrchestratorRun: async function (workspaceSlug, runId, { includeEvents = true } = {}) {
+    const qs = includeEvents ? "?include_events=true" : "?include_events=false";
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/orchestrator/runs/${encodeURIComponent(runId)}${qs}`,
+      { headers: baseHeaders() }
+    );
+    return parseJson(res);
+  },
+
+  resumeOrchestratorRun: async function (workspaceSlug, runId, body) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/orchestrator/runs/${encodeURIComponent(runId)}/resume`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify(body),
+      }
+    );
+    return parseJson(res);
+  },
+
+  writebackOrchestratorChat: async function (
+    workspaceSlug,
+    { userMessage, assistantMessage, threadSlug = null, attachments = [] } = {}
+  ) {
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/orchestrator/writeback`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify({
+          user_message: userMessage,
+          assistant_message: assistantMessage,
+          thread_slug: threadSlug,
+          attachments,
+        }),
+      }
+    );
+    return parseJson(res);
+  },
+
   cursorTestDispatch: async function (
     workspaceSlug,
     { projectId = null, roleId = "cursor-developer", message } = {}
