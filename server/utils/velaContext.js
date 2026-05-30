@@ -5,7 +5,7 @@
  * and prepends it to the AnythingLLM system prompt.
  *
  * Controlled by environment variables:
- *   VELA_API_URL — base URL of the Vela backend (e.g., http://127.0.0.1:7700)
+ *   VELA_API_URL — base URL of the Vela backend (e.g., http://127.0.0.1:7001)
  *   VELA_PROJECT_ID — optional dev/bootstrap fallback (resolved server-side)
  */
 

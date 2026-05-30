@@ -111,7 +111,9 @@ function outlookAgentEndpoints(app) {
         const result = await outlookLib.exchangeCodeForToken(code, redirectUri);
 
         const frontendUrl =
-          process.env.NODE_ENV === "development" ? "http://localhost:3000" : "";
+          process.env.NODE_ENV === "development"
+            ? `http://localhost:${process.env.VITE_DEV_PORT || 7002}`
+            : "";
 
         if (!result.success) {
           return response.redirect(

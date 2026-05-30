@@ -32,9 +32,12 @@ Fork maintenance (ledger, upstream merges, conflict hotspots): see **[`docs/blue
 .\scripts\launch-dev.ps1
 ```
 
-- Vela API (candidate): `http://127.0.0.1:7701`
-- AnythingLLM UI: `http://localhost:3000`
-- AnythingLLM API: `http://localhost:3001`
+- Vela API (candidate): `http://127.0.0.1:7001`
+- AnythingLLM UI: `http://localhost:7002`
+- AnythingLLM API: `http://localhost:7003`
+- Document collector: `http://localhost:7005`
+
+Ports are defined in velaHub `config/dev-ports.json` and wired by `launch-dev.ps1`.
 
 `launch-dev.ps1` sets `VELA_API_URL` in `server/.env.development`. See also `server/.env.vela.example`.
 

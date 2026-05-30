@@ -16,7 +16,7 @@ const { Agent } = require("undici");
 // middleware prior to leaving the node-side of the application so that is good enough >:)
 class CollectorApi {
   /** @type {number} - The default collector port */
-  static DEFAULT_COLLECTOR_PORT = 8888;
+  static DEFAULT_COLLECTOR_PORT = 7005;
 
   /** @type {number} - The maximum timeout for extension requests in milliseconds */
   extensionRequestTimeout = 15 * 60_000; // 15 minutes

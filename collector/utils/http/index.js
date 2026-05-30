@@ -1,7 +1,7 @@
 process.env.NODE_ENV === "development"
   ? require("dotenv").config({ path: `.env.${process.env.NODE_ENV}` })
   : require("dotenv").config();
-const DEFAULT_COLLECTOR_PORT = 8888;
+const DEFAULT_COLLECTOR_PORT = 7005;
 
 function reqBody(request) {
   return typeof request.body === "string"

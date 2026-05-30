@@ -18,7 +18,7 @@ export default defineConfig({
     format: 'es'
   },
   server: {
-    port: 3000,
+    port: Number(process.env.VITE_DEV_PORT) || 7002,
     host: "localhost"
   },
   define: {
