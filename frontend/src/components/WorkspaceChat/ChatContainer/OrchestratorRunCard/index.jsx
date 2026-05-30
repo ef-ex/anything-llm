@@ -48,7 +48,18 @@ export default function OrchestratorRunCard({
     return run.status_message || run.selection_reason || run.status;
   }, [run]);
 
-  const roleLabel = run.role_id || run.workflow_id || t("chat_window.vela_orchestrator.no_role");
+  const routing = run.routing_evidence || {};
+  const roleLabel =
+    run.role_id ||
+    routing.role_id ||
+    run.workflow_id ||
+    routing.workflow_id ||
+    t("chat_window.vela_orchestrator.no_role");
+  const routeConfidence =
+    typeof routing.confidence === "number" ? routing.confidence : null;
+  const routeReason = routing.reason || run.selection_reason || "";
+  const clarificationQuestion =
+    routing.clarification_question || run.pending_user_input?.question;
 
   return (
     <div className="mt-2 mb-3 ml-2 md:ml-6 border border-white/10 rounded-lg bg-white/5 light:bg-slate-50 light:border-slate-200 text-sm">
@@ -71,16 +82,27 @@ export default function OrchestratorRunCard({
               })}
             </span>
             <span className="text-white/50 light:text-slate-500">· {roleLabel}</span>
+            {run.workflow_id && run.role_id && (
+              <span className="text-white/40 light:text-slate-400">
+                · {t("chat_window.vela_orchestrator.workflow")}: {run.workflow_id}
+              </span>
+            )}
+            {routeConfidence != null && (
+              <span className="text-white/40 light:text-slate-400">
+                · {t("chat_window.vela_orchestrator.confidence")}:{" "}
+                {Math.round(routeConfidence * 100)}%
+              </span>
+            )}
             <span className="text-white/40 light:text-slate-400">{formatElapsed(run)}</span>
           </div>
           <p className="text-white/70 light:text-slate-600 mt-1 line-clamp-2">{summary}</p>
         </div>
       </button>
 
-      {run.status === "needs_user_input" && run.pending_user_input && (
+      {run.status === "needs_user_input" && (run.pending_user_input || clarificationQuestion) && (
         <div className="px-3 pb-3 border-t border-white/10 light:border-slate-200">
           <p className="text-amber-200/90 light:text-amber-800 mt-2 text-sm">
-            {run.pending_user_input.question}
+            {clarificationQuestion || run.pending_user_input?.question}
           </p>
           <div className="flex gap-2 mt-2">
             <input
@@ -112,12 +134,28 @@ export default function OrchestratorRunCard({
               {[run.provider_id, run.model_id].filter(Boolean).join(" / ")}
             </p>
           )}
-          {run.selection_reason && (
+          {(routeReason || run.selection_reason) && (
             <p>
               <span className="text-white/50 light:text-slate-400">
-                {t("chat_window.vela_orchestrator.selection")}:{" "}
+                {t("chat_window.vela_orchestrator.route_reason")}:{" "}
               </span>
-              {run.selection_reason}
+              {routeReason || run.selection_reason}
+            </p>
+          )}
+          {run.role_id && (
+            <p>
+              <span className="text-white/50 light:text-slate-400">
+                {t("chat_window.vela_orchestrator.selected_role")}:{" "}
+              </span>
+              {run.role_id}
+            </p>
+          )}
+          {(run.workflow_id || routing.workflow_id) && (
+            <p>
+              <span className="text-white/50 light:text-slate-400">
+                {t("chat_window.vela_orchestrator.selected_workflow")}:{" "}
+              </span>
+              {run.workflow_id || routing.workflow_id}
             </p>
           )}
           {run.clarification_history?.length > 0 && (
@@ -142,9 +180,20 @@ export default function OrchestratorRunCard({
               </p>
               <ul className="space-y-1 max-h-40 overflow-y-auto">
                 {run.steps.map((step) => (
-                  <li key={step.id} className="text-xs border-l-2 border-white/10 pl-2">
+                  <li
+                    key={step.id}
+                    className={`text-xs border-l-2 pl-2 ${
+                      step.step_type === "provider_chat"
+                        ? "border-primary-button/60"
+                        : "border-white/10"
+                    }`}
+                  >
                     <span className="text-white/40 light:text-slate-400">
-                      {step.step_key} ({step.status})
+                      {step.step_key}
+                      {step.step_type === "provider_chat"
+                        ? ` (${t("chat_window.vela_orchestrator.provider_chat")})`
+                        : ""}{" "}
+                      — {step.status}
                     </span>
                     {step.log_lines?.length > 0 && (
                       <span className="block">{step.log_lines[step.log_lines.length - 1]}</span>

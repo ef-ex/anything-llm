@@ -589,6 +589,28 @@ function velaEndpoints(app) {
     }
   );
 
+  app.get(
+    "/workspace/:slug/vela/orchestration/runtime-bindings",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      const projectId = request.query.project_id || workspace.velaProjectId;
+      const roleId = request.query.role_id;
+      if (!projectId || !roleId) {
+        return response.status(400).json({ error: "project_id and role_id are required" });
+      }
+      const result = await velaApiRequest("orchestration/runtime-bindings", {
+        query: {
+          role_id: roleId,
+          project_id: projectId,
+          workspace_id: request.query.workspace_id || workspace.slug,
+          run_id: request.query.run_id || undefined,
+        },
+      });
+      return sendVelaResult(response, result);
+    }
+  );
+
   app.post(
     "/workspace/:slug/vela/orchestrator/writeback",
     [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
