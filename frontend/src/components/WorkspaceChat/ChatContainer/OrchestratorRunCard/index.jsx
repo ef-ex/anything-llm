@@ -135,6 +135,45 @@ export default function OrchestratorRunCard({
               </ul>
             </div>
           )}
+          {run.steps?.length > 0 && (
+            <div>
+              <p className="text-white/50 light:text-slate-400 mb-1">
+                {t("chat_window.vela_orchestrator.steps")}
+              </p>
+              <ul className="space-y-1 max-h-40 overflow-y-auto">
+                {run.steps.map((step) => (
+                  <li key={step.id} className="text-xs border-l-2 border-white/10 pl-2">
+                    <span className="text-white/40 light:text-slate-400">
+                      {step.step_key} ({step.status})
+                    </span>
+                    {step.log_lines?.length > 0 && (
+                      <span className="block">{step.log_lines[step.log_lines.length - 1]}</span>
+                    )}
+                    {step.artifact_refs?.length > 0 && (
+                      <span className="block text-white/50">
+                        {t("chat_window.vela_orchestrator.artifacts")}:{" "}
+                        {step.artifact_refs.join(", ")}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {run.child_runs?.length > 0 && (
+            <div>
+              <p className="text-white/50 light:text-slate-400 mb-1">
+                {t("chat_window.vela_orchestrator.child_workers")}
+              </p>
+              <ul className="space-y-1">
+                {run.child_runs.map((child) => (
+                  <li key={child.run_id} className="text-xs">
+                    {child.workflow_id || child.role_id}: {child.status}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {run.events?.length > 0 && (
             <div>
               <p className="text-white/50 light:text-slate-400 mb-1">

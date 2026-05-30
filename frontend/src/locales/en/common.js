@@ -1680,6 +1680,8 @@ const TRANSLATIONS = {
       selection: "Selection",
       clarifications: "Clarifications",
       events: "Worker log",
+      steps: "Workflow steps",
+      child_workers: "Child workers",
       artifacts: "Artifacts",
     },
   },
