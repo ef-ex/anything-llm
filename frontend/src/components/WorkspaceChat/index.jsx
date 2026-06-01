@@ -12,6 +12,11 @@ import {
   useWatchForAutoPlayAssistantTTSResponse,
 } from "../contexts/TTSProvider";
 import { PENDING_HOME_MESSAGE } from "@/utils/constants";
+import { OrchestratorChatProvider } from "@/contexts/OrchestratorChatContext";
+import {
+  loadOrchestratorChatDraft,
+  mergeOrchestratorChatHistory,
+} from "@/utils/orchestratorRuns";
 
 export default function WorkspaceChat({ loading, workspace }) {
   useWatchForAutoPlayAssistantTTSResponse();
@@ -22,6 +27,23 @@ export default function WorkspaceChat({ loading, workspace }) {
   const [loaded, setLoaded] = useState(null);
 
   useEffect(() => {
+    if (loading || !workspace?.slug) return;
+
+    const key = `${workspace.slug}:${threadSlug ?? "default"}`;
+    const draft =
+      workspace?.velaProjectId != null
+        ? loadOrchestratorChatDraft(workspace.slug, threadSlug)
+        : null;
+    const draftHistory = mergeOrchestratorChatHistory([], draft);
+    setLoaded({
+      key,
+      workspace,
+      threadSlug,
+      history: draftHistory,
+    });
+  }, [workspace?.slug, workspace?.velaProjectId, loading, threadSlug]);
+
+  useEffect(() => {
     async function getHistory() {
       if (loading) return;
       if (!workspace?.slug) {
@@ -29,15 +51,23 @@ export default function WorkspaceChat({ loading, workspace }) {
         return false;
       }
 
-      const chatHistory = threadSlug
+      const key = `${workspace.slug}:${threadSlug ?? "default"}`;
+      const draft =
+        workspace?.velaProjectId != null
+          ? loadOrchestratorChatDraft(workspace.slug, threadSlug)
+          : null;
+
+      const serverHistory = threadSlug
         ? await Workspace.threads.chatHistory(workspace.slug, threadSlug)
         : await Workspace.chatHistory(workspace.slug);
 
+      const history = mergeOrchestratorChatHistory(serverHistory, draft);
+
       setLoaded({
-        key: `${workspace.slug}:${threadSlug ?? "default"}`,
+        key,
         workspace,
         threadSlug,
-        history: chatHistory,
+        history,
       });
     }
     getHistory();
@@ -98,12 +128,17 @@ export default function WorkspaceChat({ loading, workspace }) {
         workspace={loaded.workspace}
         threadSlug={loaded.threadSlug}
       >
-        <ChatContainer
-          key={loaded.key}
+        <OrchestratorChatProvider
           workspace={loaded.workspace}
           threadSlug={loaded.threadSlug}
-          knownHistory={loaded.history}
-        />
+        >
+          <ChatContainer
+            key={loaded.key}
+            workspace={loaded.workspace}
+            threadSlug={loaded.threadSlug}
+            knownHistory={loaded.history}
+          />
+        </OrchestratorChatProvider>
       </DnDFileUploaderProvider>
     </TTSProvider>
   );

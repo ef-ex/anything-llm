@@ -2,9 +2,15 @@ import Workspace from "@/models/workspace";
 import paths from "@/utils/paths";
 import showToast from "@/utils/toast";
 import { Plus, CircleNotch, Trash } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import ThreadItem from "./ThreadItem";
 import { useParams } from "react-router-dom";
+import {
+  isWorkerThreadSlug,
+  repairWorkerThreadParentsAsync,
+  sortThreadsWithWorkerChildren,
+  VELA_WORKER_THREAD_EVENT,
+} from "@/utils/orchestratorRuns";
 export const THREAD_RENAME_EVENT = "renameThread";
 
 export default function ThreadContainer({
@@ -36,15 +42,27 @@ export default function ThreadContainer({
     };
   }, []);
 
-  useEffect(() => {
-    async function fetchThreads() {
-      if (!workspace.slug) return;
-      const { threads } = await Workspace.threads.all(workspace.slug);
-      setLoading(false);
-      setThreads(threads);
-    }
-    fetchThreads();
+  const fetchThreads = useCallback(async () => {
+    if (!workspace.slug) return;
+    await repairWorkerThreadParentsAsync(workspace.slug);
+    const { threads } = await Workspace.threads.all(workspace.slug);
+    setLoading(false);
+    setThreads(sortThreadsWithWorkerChildren(threads, workspace.slug));
   }, [workspace.slug]);
+
+  useEffect(() => {
+    fetchThreads();
+  }, [fetchThreads]);
+
+  useEffect(() => {
+    const onWorkerThread = (event) => {
+      if (event.detail?.workspaceSlug === workspace.slug) {
+        fetchThreads();
+      }
+    };
+    window.addEventListener(VELA_WORKER_THREAD_EVENT, onWorkerThread);
+    return () => window.removeEventListener(VELA_WORKER_THREAD_EVENT, onWorkerThread);
+  }, [workspace.slug, fetchThreads]);
 
   // Enable toggling of bulk-deletion by holding meta-key (ctrl on win and cmd/fn on others)
   useEffect(() => {
@@ -149,6 +167,7 @@ export default function ThreadContainer({
           workspace={workspace}
           onRemove={removeThread}
           thread={thread}
+          isWorkerChild={isWorkerThreadSlug(workspace.slug, thread.slug)}
           hasNext={i !== threads.length - 1 || isVirtualThread}
         />
       ))}

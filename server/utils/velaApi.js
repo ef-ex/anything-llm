@@ -7,6 +7,20 @@
 const { VELA_API_URL } = require("./velaContext");
 
 const VELA_TIMEOUT_MS = parseInt(process.env.VELA_TIMEOUT_MS || "5000", 10);
+/** Orchestrator create/resume runs LLM routing synchronously; needs a longer proxy timeout. */
+const VELA_ORCHESTRATOR_TIMEOUT_MS = parseInt(
+  process.env.VELA_ORCHESTRATOR_TIMEOUT_MS || "120000",
+  10
+);
+
+function timeoutMsForPath(path, overrideMs) {
+  if (overrideMs != null) return overrideMs;
+  const normalized = String(path || "").replace(/^\//, "");
+  if (normalized.startsWith("orchestrator/")) {
+    return VELA_ORCHESTRATOR_TIMEOUT_MS;
+  }
+  return VELA_TIMEOUT_MS;
+}
 
 /**
  * @param {string} path — path after /api (e.g. "projects" or "entities/resolve")
@@ -14,6 +28,7 @@ const VELA_TIMEOUT_MS = parseInt(process.env.VELA_TIMEOUT_MS || "5000", 10);
  * @param {string} [opts.method]
  * @param {Object} [opts.body]
  * @param {Record<string, string|undefined|null>} [opts.query]
+ * @param {number} [opts.timeoutMs] — override default timeout for this request
  * @returns {Promise<{ok: boolean, status: number, data?: unknown, error?: string}>}
  */
 async function velaApiRequest(path, opts = {}) {
@@ -31,9 +46,11 @@ async function velaApiRequest(path, opts = {}) {
     }
   }
 
+  const timeoutMs = timeoutMsForPath(path, opts.timeoutMs);
+
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), VELA_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const init = {
       method,
       headers: { "Content-Type": "application/json" },
@@ -65,7 +82,7 @@ async function velaApiRequest(path, opts = {}) {
     return { ok: true, status: resp.status, data };
   } catch (err) {
     if (err.name === "AbortError") {
-      return { ok: false, status: 504, error: `Vela request timed out after ${VELA_TIMEOUT_MS}ms` };
+      return { ok: false, status: 504, error: `Vela request timed out after ${timeoutMs}ms` };
     }
     return { ok: false, status: 502, error: err.message };
   }
@@ -101,6 +118,8 @@ function velaUserId(user) {
 }
 
 module.exports = {
+  VELA_TIMEOUT_MS,
+  VELA_ORCHESTRATOR_TIMEOUT_MS,
   velaApiRequest,
   sendVelaResult,
   velaUserId,

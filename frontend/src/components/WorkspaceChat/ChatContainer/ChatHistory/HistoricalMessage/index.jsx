@@ -21,6 +21,7 @@ import { chatQueryRefusalResponse } from "@/utils/chat";
 import HistoricalOutputs from "./HistoricalOutputs";
 import HistoricalClarifyingQuestions from "./HistoricalClarifyingQuestions";
 import { openImageLightbox } from "@/components/ImageLightbox";
+import VelaReasoningBlock from "../../VelaReasoningBlock";
 
 const HistoricalMessage = ({
   uuid: uuidProp,
@@ -39,6 +40,7 @@ const HistoricalMessage = ({
   metrics = {},
   outputs = [],
   clarifyingQuestions = [],
+  velaRoutingReason = null,
 }) => {
   // Freeze uuid on first render. User messages arrive without a uuid and this value
   // is used as the wrapper div's `key` — a default param fallback would regenerate
@@ -146,7 +148,14 @@ const HistoricalMessage = ({
             saveChanges={saveEditedMessage}
           />
         ) : (
-          <div className="break-words">
+          <div className="break-words w-full max-w-[85%]">
+            {role === "assistant" && velaRoutingReason && (
+              <VelaReasoningBlock
+                reason={velaRoutingReason}
+                isThinking={false}
+                messageId={uuid}
+              />
+            )}
             <HistoricalClarifyingQuestions surveys={clarifyingQuestions} />
             <RenderChatContent role={role} message={message} messageId={uuid} />
             {isRefusalMessage && (
@@ -298,7 +307,7 @@ function TruncatableContent({ children }) {
 }
 
 const RenderChatContent = memo(
-  ({ role, message, messageId }) => {
+  ({ role, message, messageId, velaRoutingReason = null }) => {
     // If the message is not from the assistant, we can render it directly
     // as normal since the user cannot think (lol)
     if (role !== "assistant")
@@ -350,6 +359,7 @@ const RenderChatContent = memo(
     return (
       prevProps.role === nextProps.role &&
       prevProps.message === nextProps.message &&
+      prevProps.messageId === nextProps.messageId &&
       prevProps.messageId === nextProps.messageId
     );
   }

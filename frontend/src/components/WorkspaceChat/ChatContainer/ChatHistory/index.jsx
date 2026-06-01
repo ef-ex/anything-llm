@@ -27,6 +27,13 @@ import useChatHistoryScrollHandle from "@/hooks/useChatHistoryScrollHandle";
 import { ThoughtExpansionProvider } from "./ThoughtContainer";
 import { MessageActionsProvider } from "./MessageActionsContext";
 import OrchestratorRunCard from "../OrchestratorRunCard";
+import VelaReasoningBlock from "../VelaReasoningBlock";
+import {
+  isActiveOrchestratorStatus,
+  orchestratorRunForUserMessage,
+  orchestratorRoutingReason,
+  shouldShowOrchestratorRunCard,
+} from "@/utils/orchestratorRuns";
 
 export default forwardRef(function (
   {
@@ -193,6 +200,7 @@ export default forwardRef(function (
         orchestratorRuns,
         onOrchestratorResume,
         resumingRunId,
+        threadSlug,
       }),
     [
       workspace,
@@ -204,6 +212,7 @@ export default forwardRef(function (
       orchestratorRuns,
       onOrchestratorResume,
       resumingRunId,
+      threadSlug,
     ]
   );
   const lastMessageInfo = useMemo(() => getLastMessageInfo(history), [history]);
@@ -295,6 +304,7 @@ function buildMessages({
   orchestratorRuns = {},
   onOrchestratorResume = null,
   resumingRunId = null,
+  threadSlug = null,
 }) {
   return history.reduce((acc, props, index) => {
     const isLastBotReply =
@@ -361,6 +371,19 @@ function buildMessages({
       acc.push(<Chartable key={props.uuid} props={props} />);
     } else if (props.type === "fileDownloadCard" && !!props.content) {
       acc.push(<FileDownloadCard key={props.uuid} props={props} />);
+    } else if (props.velaOrchestratorPending && props.pending) {
+      acc.push(
+        <div key={`vela-pending-${props.uuid || index}`} className="w-full flex justify-start px-4 py-2">
+          <div className="w-full max-w-[85%]">
+            <VelaReasoningBlock
+              reason={props.velaRoutingReason || "Vela is thinking…"}
+              isThinking
+              messageId={props.uuid}
+            />
+          </div>
+        </div>
+      );
+      return acc;
     } else if (isLastBotReply && props.animate) {
       acc.push(
         <PromptReply
@@ -374,6 +397,21 @@ function buildMessages({
         />
       );
     } else {
+      let resolvedRoutingReason = props.velaRoutingReason;
+      const userMsgForRun =
+        props.role === "assistant"
+          ? history
+              .slice(0, index)
+              .reverse()
+              .find((m) => m?.role === "user")
+          : null;
+      const runForTurn =
+        props.role === "user"
+          ? orchestratorRunForUserMessage(orchestratorRuns, props)
+          : orchestratorRunForUserMessage(orchestratorRuns, userMsgForRun);
+      if (props.role === "assistant" && runForTurn) {
+        resolvedRoutingReason = undefined;
+      }
       acc.push(
         <HistoricalMessage
           key={index}
@@ -393,18 +431,31 @@ function buildMessages({
           metrics={props.metrics}
           outputs={props.outputs}
           clarifyingQuestions={props.clarifyingQuestions}
+          velaRoutingReason={resolvedRoutingReason}
         />
       );
       if (props.role === "user") {
-        const parentKey = props.uuid || (props.chatId ? String(props.chatId) : null);
-        const run = parentKey ? orchestratorRuns[parentKey] : null;
-        if (run) {
+        const run = runForTurn;
+        const routing = run
+          ? orchestratorRoutingReason(run)
+          : (props.velaRoutingReason ? String(props.velaRoutingReason).trim() : "");
+        if (routing && (!run || !isActiveOrchestratorStatus(run.status))) {
+          acc.push(
+            <VelaReasoningBlock
+              key={`vela-reasoning-${run.run_id}`}
+              reason={routing}
+              isThinking={false}
+              messageId={props.uuid}
+            />
+          );
+        }
+        if (run && shouldShowOrchestratorRunCard(run)) {
           acc.push(
             <OrchestratorRunCard
               key={`orch-${run.run_id}`}
               run={run}
-              onResume={onOrchestratorResume}
-              resuming={resumingRunId === run.run_id}
+              workspaceSlug={workspace.slug}
+              parentThreadSlug={threadSlug}
             />
           );
         }

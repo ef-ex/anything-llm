@@ -37,8 +37,24 @@ import { ChatSidebarProvider } from "./ChatSidebar";
 import SourcesSidebar from "./SourcesSidebar";
 import MemoriesSidebar from "./MemoriesSidebar";
 import VelaEntitiesSidebar from "./VelaEntitiesSidebar";
-import useOrchestratorChat from "@/hooks/useOrchestratorChat";
+import { useOrchestratorChatContext } from "@/contexts/OrchestratorChatContext";
 import Vela from "@/models/vela";
+import {
+  findOpenClarificationRun,
+  isTerminalStatus,
+  orchestratorMainThreadReply,
+  orchestratorLiveStatusText,
+  orchestratorRoutingReason,
+  populateWorkerThreadChat,
+  resolveOrchestratorPromptTurn,
+  loadOrchestratorChatDraft,
+  mergeOrchestratorChatHistory,
+  saveOrchestratorChatDraft,
+  saveOrchestratorChatDraftFinal,
+  ensureWorkerThread,
+  workerThreadForRun,
+  VELA_ORCHESTRATOR_DRAFT_EVENT,
+} from "@/utils/orchestratorRuns";
 
 export default function ChatContainer({
   workspace,
@@ -53,23 +69,89 @@ export default function ChatContainer({
   }, [workspace]);
   const [loadingResponse, setLoadingResponse] = useState(false);
   const [chatHistory, setChatHistory] = useState(knownHistory);
+  const orchestratorMode = !!workspace?.velaProjectId;
+
+  useEffect(() => {
+    setChatHistory(knownHistory);
+  }, [knownHistory]);
+
+  useEffect(() => {
+    if (!orchestratorMode || !workspace?.slug) return;
+    saveOrchestratorChatDraft(workspace.slug, threadSlug, chatHistory);
+  }, [chatHistory, orchestratorMode, workspace?.slug, threadSlug]);
+
+  useEffect(() => {
+    if (!orchestratorMode || !workspace?.slug) return;
+    const onDraft = (event) => {
+      const { workspaceSlug, threadSlug: slug } = event.detail || {};
+      if (workspaceSlug !== workspace.slug || slug !== threadSlug) return;
+      const draft = loadOrchestratorChatDraft(workspace.slug, threadSlug);
+      if (!Array.isArray(draft) || draft.length === 0) return;
+      setChatHistory((prev) => mergeOrchestratorChatHistory(prev, draft));
+    };
+    window.addEventListener(VELA_ORCHESTRATOR_DRAFT_EVENT, onDraft);
+    return () => window.removeEventListener(VELA_ORCHESTRATOR_DRAFT_EVENT, onDraft);
+  }, [orchestratorMode, workspace?.slug, threadSlug]);
+
+  useEffect(() => {
+    return () => {
+      if (orchestratorMode && workspace?.slug) {
+        saveOrchestratorChatDraft(
+          workspace.slug,
+          threadSlug,
+          chatHistoryForReplyRef.current
+        );
+      }
+    };
+  }, [orchestratorMode, workspace?.slug, threadSlug]);
+
   const [socketId, setSocketId] = useState(null);
   const [websocket, setWebsocket] = useState(null);
   const { files, parseAttachments } = useContext(DndUploaderContext);
   const { chatHistoryRef } = useChatContainerQuickScroll();
   const pendingMessageChecked = useRef(false);
   const pendingResetRef = useRef(false);
-  const orchestratorMode = !!workspace?.velaProjectId;
-  const {
-    runsByParentId,
-    resumingRunId,
-    submitOrchestratorPrompt,
-    resumeRun,
-  } = useOrchestratorChat({
-    workspace,
-    threadSlug,
-    enabled: orchestratorMode,
-  });
+  const orchestratorReplyInFlight = useRef(false);
+  const chatHistoryForReplyRef = useRef(chatHistory);
+  const runsByParentIdRef = useRef({});
+  chatHistoryForReplyRef.current = chatHistory;
+  const orchestratorApi = useOrchestratorChatContext();
+  const runsByParentId = orchestratorApi?.runsByParentId ?? {};
+  const resumingRunId = orchestratorApi?.resumingRunId ?? null;
+  const submitOrchestratorPrompt =
+    orchestratorApi?.submitOrchestratorPrompt ?? (async () => null);
+  const resumeRun = orchestratorApi?.resumeRun ?? (async () => null);
+  runsByParentIdRef.current = runsByParentId;
+
+  useEffect(() => {
+    if (!orchestratorMode) return;
+    const activeRun = Object.values(runsByParentId).find(
+      (r) =>
+        r &&
+        (r.status === "classifying" ||
+          r.status === "queued" ||
+          r.status === "running")
+    );
+    if (!activeRun) return;
+    const reason =
+      orchestratorLiveStatusText(activeRun) ||
+      (activeRun.status === "queued" || activeRun.status === "running"
+        ? "Vela is thinking…"
+        : "");
+    setChatHistory((prev) => {
+      if (!prev.some((m) => m.velaOrchestratorPending)) return prev;
+      return prev.map((m) =>
+        m.velaOrchestratorPending
+          ? {
+              ...m,
+              velaRoutingReason: reason,
+              velaOrchestratorRunId: activeRun.run_id,
+              pending: true,
+            }
+          : m
+      );
+    });
+  }, [runsByParentId, orchestratorMode]);
 
   const isEmpty =
     chatHistory.length === 0 && !sessionStorage.getItem(PENDING_HOME_MESSAGE);
@@ -128,7 +210,19 @@ export default function ChatContainer({
       attachments: parseAttachments(),
     };
     const prevChatHistory = orchestratorMode
-      ? [...chatHistory, userEntry]
+      ? [
+          ...chatHistory,
+          userEntry,
+          {
+            uuid: v4(),
+            role: "assistant",
+            content: "",
+            pending: true,
+            velaOrchestratorPending: true,
+            velaRoutingReason: "",
+            closed: false,
+          },
+        ]
       : [
           ...chatHistory,
           userEntry,
@@ -146,6 +240,9 @@ export default function ChatContainer({
       endSTTSession();
     }
     setChatHistory(prevChatHistory);
+    if (orchestratorMode) {
+      saveOrchestratorChatDraft(workspace.slug, threadSlug, prevChatHistory);
+    }
     setMessageEmit("");
     setLoadingResponse(true);
   };
@@ -240,7 +337,19 @@ export default function ChatContainer({
         attachments,
       };
       prevChatHistory = orchestratorMode
-        ? [...chatHistory, userEntry]
+        ? [
+            ...chatHistory,
+            userEntry,
+            {
+              uuid: v4(),
+              role: "assistant",
+              content: "",
+              pending: true,
+              velaOrchestratorPending: true,
+              velaRoutingReason: "",
+              closed: false,
+            },
+          ]
         : [
             ...chatHistory,
             userEntry,
@@ -256,6 +365,9 @@ export default function ChatContainer({
     }
 
     setChatHistory(prevChatHistory);
+    if (orchestratorMode) {
+      saveOrchestratorChatDraft(workspace.slug, threadSlug, prevChatHistory);
+    }
     setMessageEmit("");
     setLoadingResponse(true);
   };
@@ -278,41 +390,107 @@ export default function ChatContainer({
   }, [workspace?.slug]);
 
   useEffect(() => {
+    if (!loadingResponse) {
+      orchestratorReplyInFlight.current = false;
+      return;
+    }
+
     async function fetchReply() {
-      const promptMessage =
-        chatHistory.length > 0 ? chatHistory[chatHistory.length - 1] : null;
-      const remHistory = chatHistory.length > 0 ? chatHistory.slice(0, -1) : [];
+      const history = chatHistoryForReplyRef.current;
+      const { promptMessage, remHistory } = orchestratorMode
+        ? resolveOrchestratorPromptTurn(history)
+        : {
+            promptMessage: history.length > 0 ? history[history.length - 1] : null,
+            remHistory: history.length > 0 ? history.slice(0, -1) : [],
+          };
       var _chatHistory = [...remHistory];
 
-      if (orchestratorMode && promptMessage?.role === "user" && promptMessage?.content) {
+      if (orchestratorMode) {
+        if (!promptMessage?.content?.trim()) {
+          setLoadingResponse(false);
+          return;
+        }
+      } else if (!promptMessage || !promptMessage?.userMessage) {
+        setLoadingResponse(false);
+        return;
+      }
+
+      if (orchestratorMode && promptMessage?.content) {
+        if (orchestratorReplyInFlight.current) return;
+        orchestratorReplyInFlight.current = true;
+        saveOrchestratorChatDraft(
+          workspace.slug,
+          threadSlug,
+          chatHistoryForReplyRef.current
+        );
+
         const parentId = promptMessage.uuid || String(promptMessage.chatId || v4());
         const userText = promptMessage.content;
         const attachments = promptMessage.attachments ?? parseAttachments();
+        const openClarification = findOpenClarificationRun(runsByParentIdRef.current);
         try {
-          const finalRun = await submitOrchestratorPrompt({
-            userText,
-            parentMessageId: parentId,
-            history: remHistory,
-            attachments,
-          });
-          if (finalRun?.status === "completed" && finalRun.output_text) {
+          const finalRun = openClarification
+            ? await resumeRun(openClarification, userText, { parentMessageId: parentId })
+            : await submitOrchestratorPrompt({
+                userText,
+                parentMessageId: parentId,
+                history: remHistory,
+                attachments,
+              });
+          const assistantText = orchestratorMainThreadReply(finalRun);
+          const routingReason = orchestratorRoutingReason(finalRun) || undefined;
+          if (
+            finalRun?.role_id &&
+            finalRun.role_id !== "orchestrator" &&
+            isTerminalStatus(finalRun.status)
+          ) {
+            await ensureWorkerThread(workspace.slug, {
+              run: finalRun,
+              parentThreadSlug: threadSlug,
+            }).catch(() => {});
+            if (finalRun.status === "completed") {
+              await populateWorkerThreadChat(workspace.slug, finalRun).catch((err) =>
+                console.warn("[vela] worker thread populate", err)
+              );
+            }
+          }
+          if (assistantText) {
             const writeback = await Vela.writebackOrchestratorChat(workspace.slug, {
               userMessage: userText,
-              assistantMessage: finalRun.output_text,
+              assistantMessage: assistantText,
               threadSlug,
               attachments,
             });
-            setChatHistory((prev) => [
-              ...prev.filter((m) => !m.pending),
-              {
-                uuid: v4(),
-                role: "assistant",
-                content: finalRun.output_text,
-                chatId: writeback?.chatId,
-                closed: true,
-                pending: false,
-              },
-            ]);
+            setChatHistory((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role === "assistant" && !last?.pending && last?.content === assistantText) {
+                return prev;
+              }
+              const kept = prev.filter((m) => !m.pending && !m.velaOrchestratorPending);
+              const withRunId = kept.map((m, i) =>
+                i === kept.length - 1 && m.role === "user"
+                  ? {
+                      ...m,
+                      velaOrchestratorRunId: finalRun.run_id,
+                      velaRoutingReason: routingReason || m.velaRoutingReason,
+                    }
+                  : m
+              );
+              const next = [
+                ...withRunId,
+                {
+                  uuid: v4(),
+                  role: "assistant",
+                  content: assistantText,
+                  chatId: writeback?.chatId,
+                  closed: true,
+                  pending: false,
+                  velaOrchestratorRunId: finalRun.run_id,
+                },
+              ];
+              saveOrchestratorChatDraftFinal(workspace.slug, threadSlug, next);
+              return next;
+            });
           } else {
             setChatHistory((prev) => prev.filter((m) => !m.pending));
           }
@@ -330,8 +508,10 @@ export default function ChatContainer({
               pending: false,
             },
           ]);
+        } finally {
+          orchestratorReplyInFlight.current = false;
+          setLoadingResponse(false);
         }
-        setLoadingResponse(false);
         return;
       }
 
@@ -380,14 +560,15 @@ export default function ChatContainer({
       });
       return;
     }
-    loadingResponse === true && fetchReply();
+    fetchReply();
   }, [
     loadingResponse,
-    chatHistory,
     workspace,
     orchestratorMode,
     submitOrchestratorPrompt,
+    resumeRun,
     threadSlug,
+    websocket,
   ]);
 
   // TODO: Simplify this WSS stuff
@@ -563,39 +744,36 @@ export default function ChatContainer({
                     updateHistory={setChatHistory}
                     regenerateAssistantMessage={regenerateAssistantMessage}
                     websocket={websocket}
+                    threadSlug={threadSlug}
                     orchestratorRuns={runsByParentId}
                     onOrchestratorResume={async (run, answer) => {
                       setLoadingResponse(true);
-                      const finalRun = await resumeRun(run, answer);
-                      if (
-                        finalRun?.status === "completed" &&
-                        finalRun.output_text
-                      ) {
-                        const userMsg = chatHistory.find(
-                          (m) =>
-                            (m.uuid || String(m.chatId)) ===
-                            (run.parent_message_id || finalRun.parent_message_id)
-                        );
-                        const userText = userMsg?.content || "";
-                        const writeback = await Vela.writebackOrchestratorChat(
-                          workspace.slug,
-                          {
-                            userMessage: userText,
-                            assistantMessage: finalRun.output_text,
-                            threadSlug,
-                          }
-                        );
-                        setChatHistory((prev) => [
-                          ...prev.filter((m) => !m.pending),
-                          {
-                            uuid: v4(),
-                            role: "assistant",
-                            content: finalRun.output_text,
-                            chatId: writeback?.chatId,
-                            closed: true,
-                            pending: false,
-                          },
-                        ]);
+                      try {
+                        const finalRun = await resumeRun(run, answer);
+                        const assistantText = orchestratorMainThreadReply(finalRun);
+                        if (assistantText) {
+                          const writeback = await Vela.writebackOrchestratorChat(
+                            workspace.slug,
+                            {
+                              userMessage: answer,
+                              assistantMessage: assistantText,
+                              threadSlug,
+                            }
+                          );
+                          setChatHistory((prev) => [
+                            ...prev.filter((m) => !m.pending),
+                            {
+                              uuid: v4(),
+                              role: "assistant",
+                              content: assistantText,
+                              chatId: writeback?.chatId,
+                              closed: true,
+                              pending: false,
+                            },
+                          ]);
+                        }
+                      } catch (err) {
+                        console.error(err);
                       }
                       setLoadingResponse(false);
                     }}

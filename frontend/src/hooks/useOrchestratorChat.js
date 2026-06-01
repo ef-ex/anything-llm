@@ -2,10 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 } from "uuid";
 import Vela from "@/models/vela";
 import {
+  ensureWorkerThread,
   isTerminalStatus,
   pollOrchestratorRun,
   refreshOrchestratorRuns,
+  saveWorkerParentForRun,
+  syncWorkerThreadLiveDraft,
   upsertStoredRun,
+  workerRoleIdForOrchestratorRequest,
 } from "@/utils/orchestratorRuns";
 
 function buildMessagesFromHistory(history, userText) {
@@ -28,20 +32,55 @@ export default function useOrchestratorChat({
   workspace,
   threadSlug,
   enabled,
+  onRunUpdate = null,
+  parentThreadSlug = null,
+  /** Route thread where the artist sent the message (before worker-thread resolution). */
+  workerOriginThreadSlug = null,
 }) {
   const [runsByParentId, setRunsByParentId] = useState({});
   const [resumingRunId, setResumingRunId] = useState(null);
   const pollingRef = useRef(new Set());
+  const workerThreadStartedRef = useRef(new Set());
+  const onRunUpdateRef = useRef(onRunUpdate);
+  onRunUpdateRef.current = onRunUpdate;
 
   const sessionId = threadSlug || workspace?.slug || "default";
 
   const syncRun = useCallback(
     (parentMessageId, run) => {
-      if (!workspace?.slug || !parentMessageId) return;
+      if (!workspace?.slug || !parentMessageId || !run) return;
       upsertStoredRun(workspace.slug, threadSlug, parentMessageId, run);
-      setRunsByParentId((prev) => ({ ...prev, [parentMessageId]: run }));
+      setRunsByParentId((prev) => {
+        const next = { ...prev };
+        for (const key of Object.keys(next)) {
+          if (next[key]?.run_id === run.run_id && key !== parentMessageId) {
+            delete next[key];
+          }
+        }
+        next[parentMessageId] = run;
+        return next;
+      });
+      onRunUpdateRef.current?.(parentMessageId, run);
+
+      if (
+        run.role_id &&
+        run.role_id !== "orchestrator" &&
+        (run.status === "classifying" ||
+          run.status === "queued" ||
+          run.status === "running") &&
+        !workerThreadStartedRef.current.has(run.run_id)
+      ) {
+        workerThreadStartedRef.current.add(run.run_id);
+        ensureWorkerThread(workspace.slug, {
+          run,
+          parentThreadSlug:
+            workerOriginThreadSlug ?? parentThreadSlug ?? threadSlug ?? null,
+        })
+          .then(() => syncWorkerThreadLiveDraft(workspace.slug, run))
+          .catch((err) => console.warn("[vela] worker thread", err));
+      }
     },
-    [workspace?.slug, threadSlug]
+    [workspace?.slug, threadSlug, parentThreadSlug, workerOriginThreadSlug]
   );
 
   useEffect(() => {
@@ -100,9 +139,15 @@ export default function useOrchestratorChat({
         parent_message_id: clientMessageId,
         client_message_id: clientMessageId,
         messages: buildMessagesFromHistory(history, userText),
-        role_id: roleId || workspace.velaRolePresetId || null,
+        role_id: workerRoleIdForOrchestratorRequest(roleId, workspace),
         attachment_hints: (attachments || []).map((a) => a?.name || String(a)).filter(Boolean),
       });
+
+      saveWorkerParentForRun(
+        workspace.slug,
+        created.run_id,
+        workerOriginThreadSlug ?? parentThreadSlug ?? threadSlug ?? null
+      );
 
       let detail = await Vela.getOrchestratorRun(workspace.slug, created.run_id);
       syncRun(clientMessageId, detail);
@@ -111,11 +156,11 @@ export default function useOrchestratorChat({
       }
       return detail;
     },
-    [workspace, sessionId, syncRun, watchRun]
+    [workspace, sessionId, syncRun, watchRun, workerOriginThreadSlug, parentThreadSlug, threadSlug]
   );
 
   const resumeRun = useCallback(
-    async (run, answer) => {
+    async (run, answer, { parentMessageId = null } = {}) => {
       if (!workspace?.slug) return null;
       setResumingRunId(run.run_id);
       try {
@@ -123,10 +168,10 @@ export default function useOrchestratorChat({
           answer,
           role_id: answer.includes("-") && !answer.includes(" ") ? answer : undefined,
         });
-        const parentId = run.parent_message_id || detail.parent_message_id;
-        syncRun(parentId, detail);
+        const attachParent = parentMessageId || run.parent_message_id || detail.parent_message_id;
+        syncRun(attachParent, detail);
         if (detail.status === "queued" || detail.status === "running") {
-          return watchRun(parentId, detail.run_id);
+          return watchRun(attachParent, detail.run_id);
         }
         return detail;
       } finally {

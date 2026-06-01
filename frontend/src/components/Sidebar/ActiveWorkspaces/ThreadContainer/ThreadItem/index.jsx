@@ -23,6 +23,7 @@ export default function ThreadItem({
   toggleMarkForDeletion,
   hasNext,
   ctrlPressed = false,
+  isWorkerChild = false,
 }) {
   const { slug: urlSlug, threadSlug = null } = useParams();
   const workspaceSlug = workspace?.slug ?? urlSlug;
@@ -67,8 +68,10 @@ export default function ThreadItem({
 
       {/* Curved line inline placeholder for spacing - not visible */}
       <div
-        style={{ width: THREAD_CALLOUT_DETAIL_WIDTH + 8 }}
-        className="h-full"
+        style={{
+          width: THREAD_CALLOUT_DETAIL_WIDTH + 8 + (isWorkerChild ? 12 : 0),
+        }}
+        className="h-full shrink-0"
       />
       <div
         className={`flex w-full items-center justify-between pr-2 group/thread relative ${isActive ? "bg-[var(--theme-sidebar-thread-selected)] light:bg-blue-200" : "hover:bg-theme-sidebar-subitem-hover light:hover:bg-slate-300"} rounded-[4px]`}
