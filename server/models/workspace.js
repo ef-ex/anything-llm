@@ -404,6 +404,24 @@ const Workspace = {
     }
   },
 
+  getByVelaProjectId: async function (velaProjectId) {
+    if (!velaProjectId) return null;
+    return this.get({ velaProjectId: String(velaProjectId) });
+  },
+
+  linkedVelaProjectIds: async function () {
+    try {
+      const rows = await prisma.workspaces.findMany({
+        where: { velaProjectId: { not: null } },
+        select: { velaProjectId: true },
+      });
+      return rows.map((row) => row.velaProjectId).filter(Boolean);
+    } catch (error) {
+      console.error(error.message);
+      return [];
+    }
+  },
+
   delete: async function (clause = {}) {
     try {
       await prisma.workspaces.delete({

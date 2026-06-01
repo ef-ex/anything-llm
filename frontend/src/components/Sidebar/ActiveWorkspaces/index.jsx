@@ -207,11 +207,7 @@ export default function ActiveWorkspaces() {
                         </Link>
                       </div>
                       {isActive && (
-                        <ThreadContainer
-                          workspace={workspace}
-                          isActive={isActive}
-                          isVirtualThread={isVirtuallyActive}
-                        />
+                        <ThreadContainer workspace={workspace} isActive={isActive} />
                       )}
                     </div>
                   )}

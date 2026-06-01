@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { default as WorkspaceChatContainer } from "@/components/WorkspaceChat";
 import Sidebar from "@/components/Sidebar";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Workspace from "@/models/workspace";
 import PasswordModal, { usePasswordModal } from "@/components/Modals/Password";
 import { isMobile } from "react-device-detect";
@@ -25,8 +25,10 @@ export default function WorkspaceChat() {
 }
 
 function ShowWorkspaceChat() {
-  const { slug } = useParams();
+  const { slug, threadSlug } = useParams();
+  const navigate = useNavigate();
   const [workspace, setWorkspace] = useState(null);
+  const ensuringThreadRef = useRef(false);
   // Tracks which workspace `workspace` belongs to. While a new workspace's
   // data is in flight, we keep the previous workspace's chat mounted
   // (Slack/Linear-style transition) instead of flashing a skeleton.
@@ -62,6 +64,35 @@ function ShowWorkspaceChat() {
     }
     getWorkspace();
   }, [slug]);
+
+  useEffect(() => {
+    async function ensureThreadRoute() {
+      if (!workspace?.slug || threadSlug || ensuringThreadRef.current) return;
+
+      ensuringThreadRef.current = true;
+      try {
+        const { threads } = await Workspace.threads.all(workspace.slug);
+        if (threads?.length > 0) {
+          navigate(
+            paths.workspace.thread(workspace.slug, threads[0].slug),
+            { replace: true }
+          );
+          return;
+        }
+        const { thread, error } = await Workspace.threads.new(workspace.slug);
+        if (thread) {
+          navigate(paths.workspace.thread(workspace.slug, thread.slug), {
+            replace: true,
+          });
+          return;
+        }
+        console.warn("[vela] could not create initial thread:", error);
+      } finally {
+        ensuringThreadRef.current = false;
+      }
+    }
+    ensureThreadRoute();
+  }, [workspace?.slug, threadSlug, navigate]);
 
   return (
     <WorkspaceChatContainer

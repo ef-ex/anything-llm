@@ -21,6 +21,35 @@ function velaEndpoints(app) {
   if (!app) return;
 
   app.get(
+    "/vela/projects/linkable",
+    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    async (_request, response) => {
+      if (!process.env.VELA_API_URL) {
+        return response.status(503).json({
+          error: "Vela backend not configured (VELA_API_URL)",
+          projects: [],
+        });
+      }
+
+      const result = await velaApiRequest("projects", {
+        query: { include_archived: "false" },
+      });
+      if (!result.ok) {
+        return sendVelaResult(response, result);
+      }
+
+      const linked = new Set(await Workspace.linkedVelaProjectIds());
+      const projects = (Array.isArray(result.data) ? result.data : []).map(
+        (project) => ({
+          ...project,
+          has_workspace: linked.has(project.id),
+        })
+      );
+      return response.status(200).json({ projects });
+    }
+  );
+
+  app.get(
     "/workspace/:slug/vela/status",
     [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
     async (_request, response) => {
@@ -33,7 +62,9 @@ function velaEndpoints(app) {
     "/workspace/:slug/vela/projects",
     [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
     async (_request, response) => {
-      const result = await velaApiRequest("projects");
+      const result = await velaApiRequest("projects", {
+        query: { include_archived: "false" },
+      });
       sendVelaResult(response, result);
     }
   );

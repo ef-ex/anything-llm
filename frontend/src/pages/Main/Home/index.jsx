@@ -43,15 +43,13 @@ async function getTargetWorkspace() {
   return workspaces.length > 0 ? workspaces[0] : null;
 }
 
-async function createDefaultWorkspace(workspaceName = "My Workspace") {
-  const { workspace, message: errorMsg } = await Workspace.new({
-    name: workspaceName,
-  });
-  if (!workspace) {
-    showToast(errorMsg || "Failed to create workspace", "error");
-    return null;
-  }
-  return workspace;
+async function createDefaultWorkspace() {
+  showToast(
+    "Use + in the sidebar to open a Vela project in chat.",
+    "info",
+    { clear: true }
+  );
+  return null;
 }
 
 export default function Home() {

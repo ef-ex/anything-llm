@@ -13,10 +13,7 @@ import {
 } from "@/utils/orchestratorRuns";
 export const THREAD_RENAME_EVENT = "renameThread";
 
-export default function ThreadContainer({
-  workspace,
-  isVirtualThread = false,
-}) {
+export default function ThreadContainer({ workspace }) {
   const { threadSlug = null } = useParams();
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -109,9 +106,27 @@ export default function ThreadContainer({
     await Workspace.threads.deleteBulk(workspace.slug, slugs);
     setThreads((prev) => prev.filter((t) => !t.deleted));
 
-    // Only redirect if current thread is being deleted
     if (slugs.includes(threadSlug)) {
-      window.location.href = paths.workspace.chat(workspace.slug);
+      const remaining = threads.filter(
+        (t) => !t.deleted && !slugs.includes(t.slug)
+      );
+      if (remaining.length > 0) {
+        window.location.href = paths.workspace.thread(
+          workspace.slug,
+          remaining[0].slug
+        );
+        return;
+      }
+      const { thread, error } = await Workspace.threads.new(workspace.slug);
+      if (thread) {
+        window.location.href = paths.workspace.thread(
+          workspace.slug,
+          thread.slug
+        );
+      } else {
+        console.warn("[vela] thread recreate after delete failed:", error);
+        window.location.href = paths.home();
+      }
     }
   };
 
@@ -131,9 +146,7 @@ export default function ThreadContainer({
   }
 
   function getActiveThreadIdx() {
-    if (isVirtualThread) return threads.length + 1;
-    const idx = threads.findIndex((t) => t?.slug === threadSlug);
-    return idx >= 0 ? idx + 1 : 0;
+    return threads.findIndex((t) => t?.slug === threadSlug);
   }
 
   if (loading) {
@@ -148,39 +161,21 @@ export default function ThreadContainer({
 
   return (
     <div className="flex flex-col" role="list" aria-label="Threads">
-      <ThreadItem
-        idx={0}
-        activeIdx={activeThreadIdx}
-        isActive={activeThreadIdx === 0}
-        workspace={workspace}
-        thread={{ slug: null, name: "default" }}
-        hasNext={threads.length > 0 || isVirtualThread}
-      />
       {threads.map((thread, i) => (
         <ThreadItem
           key={thread.slug}
-          idx={i + 1}
+          idx={i}
           ctrlPressed={ctrlPressed}
           toggleMarkForDeletion={toggleForDeletion}
           activeIdx={activeThreadIdx}
-          isActive={activeThreadIdx === i + 1}
+          isActive={activeThreadIdx === i}
           workspace={workspace}
           onRemove={removeThread}
           thread={thread}
           isWorkerChild={isWorkerThreadSlug(workspace.slug, thread.slug)}
-          hasNext={i !== threads.length - 1 || isVirtualThread}
+          hasNext={i !== threads.length - 1}
         />
       ))}
-      {isVirtualThread && (
-        <ThreadItem
-          idx={activeThreadIdx}
-          activeIdx={activeThreadIdx}
-          isActive={true}
-          workspace={workspace}
-          thread={{ slug: null, name: "*New Thread", virtual: true }}
-          hasNext={false}
-        />
-      )}
       <DeleteAllThreadButton
         ctrlPressed={ctrlPressed}
         threads={threads}

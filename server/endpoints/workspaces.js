@@ -32,6 +32,7 @@ const {
 } = require("../utils/files/pfp");
 const { getTTSProvider } = require("../utils/TextToSpeech");
 const { WorkspaceThread } = require("../models/workspaceThread");
+const { velaApiRequest, velaUserId } = require("../utils/velaApi");
 
 const truncate = require("truncate");
 const { purgeDocument } = require("../utils/files/purgeDocument");
@@ -52,8 +53,78 @@ function workspaceEndpoints(app) {
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
-        const { name = null } = reqBody(request);
-        const { workspace, message } = await Workspace.new(name, user?.id);
+        const { name = null, velaProjectId = null } = reqBody(request);
+
+        if (process.env.VELA_API_URL && !velaProjectId) {
+          response.status(400).json({
+            workspace: null,
+            message:
+              "Select a Vela project to open in chat. Create projects in Vela Hub first.",
+          });
+          return;
+        }
+
+        let workspaceName = name;
+        const additionalFields = {};
+
+        if (velaProjectId) {
+          const existing = await Workspace.getByVelaProjectId(velaProjectId);
+          if (existing) {
+            response.status(409).json({
+              workspace: null,
+              message: `A chat workspace already exists for this project (${existing.name}).`,
+            });
+            return;
+          }
+
+          const projectResult = await velaApiRequest(
+            `projects/${encodeURIComponent(velaProjectId)}`
+          );
+          if (!projectResult.ok) {
+            response.status(projectResult.status === 404 ? 404 : 502).json({
+              workspace: null,
+              message:
+                projectResult.error ||
+                "Could not load Vela project. Is Vela Hub running?",
+            });
+            return;
+          }
+
+          const project = projectResult.data;
+          if (project?.status === "archived" || project?.archived) {
+            response.status(400).json({
+              workspace: null,
+              message: "That project is archived. Restore it in Vela Hub first.",
+            });
+            return;
+          }
+
+          workspaceName = project.name;
+          additionalFields.velaProjectId = String(velaProjectId);
+          additionalFields.chatProvider = "vela-dispatch";
+        }
+
+        const { workspace, message } = await Workspace.new(
+          workspaceName,
+          user?.id,
+          additionalFields
+        );
+
+        if (workspace?.velaProjectId) {
+          const grantResult = await velaApiRequest(
+            `projects/${workspace.velaProjectId}/grant-access`,
+            {
+              method: "POST",
+              query: { user_id: velaUserId(user) },
+            }
+          );
+          if (!grantResult.ok) {
+            console.warn(
+              `[vela] grant-access skipped for project ${workspace.velaProjectId}: ${grantResult.error}`
+            );
+          }
+        }
+
         await Telemetry.sendTelemetry(
           "workspace_created",
           {
