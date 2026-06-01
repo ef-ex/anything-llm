@@ -4,12 +4,10 @@ import NewWorkspaceModal, {
   useNewWorkspaceModal,
 } from "../Modals/NewWorkspace";
 import ActiveWorkspaces from "./ActiveWorkspaces";
-import useLogo from "@/hooks/useLogo";
 import useUser from "@/hooks/useUser";
+import VelaSidebarBrand from "./VelaSidebarBrand";
 import Footer from "../Footer";
 import SettingsButton from "../SettingsButton";
-import { Link } from "react-router-dom";
-import paths from "@/utils/paths";
 import { useTranslation } from "react-i18next";
 import { useSidebarToggle, ToggleSidebarButton } from "./SidebarToggle";
 import SearchBox from "./SearchBox";
@@ -18,7 +16,6 @@ import { createPortal } from "react-dom";
 
 export default function Sidebar() {
   const { user } = useUser();
-  const { logo } = useLogo();
   const sidebarRef = useRef(null);
   const { showSidebar, setShowSidebar, canToggleSidebar } = useSidebarToggle();
   const {
@@ -45,13 +42,7 @@ export default function Sidebar() {
         <div className="overflow-hidden h-full">
           <div className="flex shrink-0 w-full justify-center my-[18px]">
             <div className="flex w-[250px] min-w-[250px]">
-              <Link to={paths.home()} aria-label="Home">
-                <img
-                  src={logo}
-                  alt="Logo"
-                  className={`rounded max-h-[24px] object-contain transition-opacity duration-500 ${showSidebar ? "opacity-100" : "opacity-0"}`}
-                />
-              </Link>
+              <VelaSidebarBrand showSidebar={showSidebar} />
             </div>
           </div>
           <div
@@ -81,7 +72,6 @@ export default function Sidebar() {
 }
 
 export function SidebarMobileHeader() {
-  const { logo } = useLogo();
   const sidebarRef = useRef(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showBgOverlay, setShowBgOverlay] = useState(false);
@@ -120,12 +110,7 @@ export function SidebarMobileHeader() {
           <List className="h-6 w-6" />
         </button>
         <div className="flex items-center justify-center flex-grow">
-          <img
-            src={logo}
-            alt="Logo"
-            className="block mx-auto h-6 w-auto"
-            style={{ maxHeight: "40px", objectFit: "contain" }}
-          />
+          <VelaSidebarBrand className="text-base" />
         </div>
         <div className="w-12"></div>
       </div>
@@ -151,12 +136,7 @@ export function SidebarMobileHeader() {
             {/* Header Information */}
             <div className="flex w-full items-center justify-between gap-x-4">
               <div className="flex shrink-1 w-fit items-center justify-start">
-                <img
-                  src={logo}
-                  alt="Logo"
-                  className="rounded w-full max-h-[40px]"
-                  style={{ objectFit: "contain" }}
-                />
+                <VelaSidebarBrand />
               </div>
               {(!user || user?.role !== "default") && (
                 <div className="flex gap-x-2 items-center text-slate-500 shink-0">
