@@ -32,7 +32,7 @@ import paths from "@/utils/paths";
 import QuickActions from "@/components/lib/QuickActions";
 import SuggestedMessages from "@/components/lib/SuggestedMessages";
 import ChatSettingsMenu from "./ChatSettingsMenu";
-import WorkspaceModelPicker from "./WorkspaceModelPicker";
+import ChatContextHeader from "./ChatContextHeader";
 import { ChatSidebarProvider } from "./ChatSidebar";
 import SourcesSidebar from "./SourcesSidebar";
 import MemoriesSidebar from "./MemoriesSidebar";
@@ -52,7 +52,6 @@ import {
   saveOrchestratorChatDraft,
   saveOrchestratorChatDraftFinal,
   ensureWorkerThread,
-  workerThreadForRun,
   VELA_ORCHESTRATOR_DRAFT_EVENT,
 } from "@/utils/orchestratorRuns";
 
@@ -60,6 +59,13 @@ export default function ChatContainer({
   workspace,
   threadSlug = null,
   knownHistory = [],
+  embedded = false,
+  showPromptInput = true,
+  compactHeader: _compactHeader = false,
+  hideContextHeader = false,
+  layoutMode = null,
+  onLayoutModeChange = null,
+  showLayoutToggle = false,
 }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -76,6 +82,25 @@ export default function ChatContainer({
   }, [knownHistory]);
 
   useEffect(() => {
+    if (!embedded || !workspace?.slug) return;
+    let cancelled = false;
+    (async () => {
+      const draft =
+        orchestratorMode && workspace?.slug
+          ? loadOrchestratorChatDraft(workspace.slug, threadSlug)
+          : null;
+      const serverHistory = threadSlug
+        ? await Workspace.threads.chatHistory(workspace.slug, threadSlug)
+        : await Workspace.chatHistory(workspace.slug);
+      if (cancelled) return;
+      setChatHistory(mergeOrchestratorChatHistory(serverHistory, draft));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [embedded, workspace?.slug, threadSlug, orchestratorMode]);
+
+  useEffect(() => {
     if (!orchestratorMode || !workspace?.slug) return;
     saveOrchestratorChatDraft(workspace.slug, threadSlug, chatHistory);
   }, [chatHistory, orchestratorMode, workspace?.slug, threadSlug]);
@@ -90,7 +115,8 @@ export default function ChatContainer({
       setChatHistory((prev) => mergeOrchestratorChatHistory(prev, draft));
     };
     window.addEventListener(VELA_ORCHESTRATOR_DRAFT_EVENT, onDraft);
-    return () => window.removeEventListener(VELA_ORCHESTRATOR_DRAFT_EVENT, onDraft);
+    return () =>
+      window.removeEventListener(VELA_ORCHESTRATOR_DRAFT_EVENT, onDraft);
   }, [orchestratorMode, workspace?.slug, threadSlug]);
 
   useEffect(() => {
@@ -400,7 +426,8 @@ export default function ChatContainer({
       const { promptMessage, remHistory } = orchestratorMode
         ? resolveOrchestratorPromptTurn(history)
         : {
-            promptMessage: history.length > 0 ? history[history.length - 1] : null,
+            promptMessage:
+              history.length > 0 ? history[history.length - 1] : null,
             remHistory: history.length > 0 ? history.slice(0, -1) : [],
           };
       var _chatHistory = [...remHistory];
@@ -424,13 +451,18 @@ export default function ChatContainer({
           chatHistoryForReplyRef.current
         );
 
-        const parentId = promptMessage.uuid || String(promptMessage.chatId || v4());
+        const parentId =
+          promptMessage.uuid || String(promptMessage.chatId || v4());
         const userText = promptMessage.content;
         const attachments = promptMessage.attachments ?? parseAttachments();
-        const openClarification = findOpenClarificationRun(runsByParentIdRef.current);
+        const openClarification = findOpenClarificationRun(
+          runsByParentIdRef.current
+        );
         try {
           const finalRun = openClarification
-            ? await resumeRun(openClarification, userText, { parentMessageId: parentId })
+            ? await resumeRun(openClarification, userText, {
+                parentMessageId: parentId,
+              })
             : await submitOrchestratorPrompt({
                 userText,
                 parentMessageId: parentId,
@@ -438,7 +470,8 @@ export default function ChatContainer({
                 attachments,
               });
           const assistantText = orchestratorMainThreadReply(finalRun);
-          const routingReason = orchestratorRoutingReason(finalRun) || undefined;
+          const routingReason =
+            orchestratorRoutingReason(finalRun) || undefined;
           if (
             finalRun?.role_id &&
             finalRun.role_id !== "orchestrator" &&
@@ -449,24 +482,33 @@ export default function ChatContainer({
               parentThreadSlug: threadSlug,
             }).catch(() => {});
             if (finalRun.status === "completed") {
-              await populateWorkerThreadChat(workspace.slug, finalRun).catch((err) =>
-                console.warn("[vela] worker thread populate", err)
+              await populateWorkerThreadChat(workspace.slug, finalRun).catch(
+                (err) => console.warn("[vela] worker thread populate", err)
               );
             }
           }
           if (assistantText) {
-            const writeback = await Vela.writebackOrchestratorChat(workspace.slug, {
-              userMessage: userText,
-              assistantMessage: assistantText,
-              threadSlug,
-              attachments,
-            });
+            const writeback = await Vela.writebackOrchestratorChat(
+              workspace.slug,
+              {
+                userMessage: userText,
+                assistantMessage: assistantText,
+                threadSlug,
+                attachments,
+              }
+            );
             setChatHistory((prev) => {
               const last = prev[prev.length - 1];
-              if (last?.role === "assistant" && !last?.pending && last?.content === assistantText) {
+              if (
+                last?.role === "assistant" &&
+                !last?.pending &&
+                last?.content === assistantText
+              ) {
                 return prev;
               }
-              const kept = prev.filter((m) => !m.pending && !m.velaOrchestratorPending);
+              const kept = prev.filter(
+                (m) => !m.pending && !m.velaOrchestratorPending
+              );
               const withRunId = kept.map((m, i) =>
                 i === kept.length - 1 && m.role === "user"
                   ? {
@@ -664,31 +706,48 @@ export default function ChatContainer({
     };
   }, [socketId]);
 
+  const outerClass = embedded
+    ? "relative flex w-full h-full z-[1]"
+    : "relative flex md:ml-[2px] md:mr-[16px] md:my-[16px] w-full h-full z-[2]";
+  const innerClass = embedded
+    ? "flex-1 min-w-0 relative w-full h-full overflow-hidden bg-zinc-900 light:bg-white"
+    : "flex-1 min-w-0 transition-all duration-500 relative md:rounded-[16px] bg-zinc-900 light:bg-white w-full h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border";
+  const heightStyle = embedded
+    ? { height: "100%" }
+    : { height: isMobile ? "100%" : "calc(100% - 32px)" };
+
   if (isEmpty) {
     return (
       <ChatSidebarProvider>
-        <div
-          style={{ height: isMobile ? "100%" : "calc(100% - 32px)" }}
-          className="relative flex md:ml-[2px] md:mr-[16px] md:my-[16px] w-full h-full z-[2]"
-        >
-          <ChatSettingsMenu workspaceSlug={workspace.slug} />
-          <div className="flex-1 min-w-0 transition-all duration-500 relative md:rounded-[16px] bg-zinc-900 light:bg-white w-full h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border">
-            {isMobile && <SidebarMobileHeader />}
-            <WorkspaceModelPicker workspaceSlug={workspace.slug} />
+        <div style={heightStyle} className={outerClass}>
+          {!embedded && <ChatSettingsMenu workspaceSlug={workspace.slug} />}
+          <div className={innerClass}>
+            {isMobile && !embedded && <SidebarMobileHeader />}
+            {!hideContextHeader && (
+              <ChatContextHeader
+                workspace={activeWorkspace}
+                threadSlug={threadSlug}
+                layoutMode={layoutMode}
+                onLayoutModeChange={onLayoutModeChange}
+                showLayoutToggle={showLayoutToggle}
+              />
+            )}
             <DnDFileUploaderWrapper>
               <div className="flex flex-col h-full w-full items-center justify-center">
                 <div className="flex flex-col items-center w-full max-w-[750px]">
                   <h1 className="text-white text-xl md:text-2xl mb-11 text-center">
                     {t("main-page.greeting")}
                   </h1>
-                  <PromptInput
-                    workspace={workspace}
-                    submit={handleSubmit}
-                    isStreaming={loadingResponse}
-                    sendCommand={sendCommand}
-                    attachments={files}
-                    centered={true}
-                  />
+                  {showPromptInput && (
+                    <PromptInput
+                      workspace={workspace}
+                      submit={handleSubmit}
+                      isStreaming={loadingResponse}
+                      sendCommand={sendCommand}
+                      attachments={files}
+                      centered={true}
+                    />
+                  )}
                   <QuickActions
                     hasAvailableWorkspace={!!workspace}
                     onCreateAgent={() => navigate(paths.settings.agentSkills())}
@@ -712,11 +771,13 @@ export default function ChatContainer({
             </DnDFileUploaderWrapper>
             <ChatTooltips />
           </div>
-          <MemoriesSidebar workspace={workspace} />
-          <VelaEntitiesSidebar
-            workspace={activeWorkspace}
-            onWorkspaceUpdate={setActiveWorkspace}
-          />
+          {!embedded && <MemoriesSidebar workspace={workspace} />}
+          {!embedded && (
+            <VelaEntitiesSidebar
+              workspace={activeWorkspace}
+              onWorkspaceUpdate={setActiveWorkspace}
+            />
+          )}
         </div>
       </ChatSidebarProvider>
     );
@@ -724,14 +785,19 @@ export default function ChatContainer({
 
   return (
     <ChatSidebarProvider>
-      <div
-        style={{ height: isMobile ? "100%" : "calc(100% - 32px)" }}
-        className="relative flex md:ml-[2px] md:mr-[16px] md:my-[16px] w-full h-full z-[2]"
-      >
-        <ChatSettingsMenu workspaceSlug={workspace.slug} />
-        <div className="flex-1 min-w-0 transition-all duration-500 relative md:rounded-[16px] bg-zinc-900 light:bg-white text-white light:text-slate-900 h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border">
-          {isMobile && <SidebarMobileHeader />}
-          <WorkspaceModelPicker workspaceSlug={workspace.slug} />
+      <div style={heightStyle} className={outerClass}>
+        {!embedded && <ChatSettingsMenu workspaceSlug={workspace.slug} />}
+        <div className={`${innerClass} text-white light:text-slate-900`}>
+          {isMobile && !embedded && <SidebarMobileHeader />}
+          {!hideContextHeader && (
+            <ChatContextHeader
+              workspace={activeWorkspace}
+              threadSlug={threadSlug}
+              layoutMode={layoutMode}
+              onLayoutModeChange={onLayoutModeChange}
+              showLayoutToggle={showLayoutToggle}
+            />
+          )}
           <DnDFileUploaderWrapper>
             <div className="flex flex-col h-full w-full pb-20 md:pb-0">
               <div className="contents">
@@ -750,16 +816,18 @@ export default function ChatContainer({
                       setLoadingResponse(true);
                       try {
                         const finalRun = await resumeRun(run, answer);
-                        const assistantText = orchestratorMainThreadReply(finalRun);
+                        const assistantText =
+                          orchestratorMainThreadReply(finalRun);
                         if (assistantText) {
-                          const writeback = await Vela.writebackOrchestratorChat(
-                            workspace.slug,
-                            {
-                              userMessage: answer,
-                              assistantMessage: assistantText,
-                              threadSlug,
-                            }
-                          );
+                          const writeback =
+                            await Vela.writebackOrchestratorChat(
+                              workspace.slug,
+                              {
+                                userMessage: answer,
+                                assistantMessage: assistantText,
+                                threadSlug,
+                              }
+                            );
                           setChatHistory((prev) => [
                             ...prev.filter((m) => !m.pending),
                             {
@@ -780,25 +848,29 @@ export default function ChatContainer({
                     resumingRunId={resumingRunId}
                   />
                 </MetricsProvider>
-                <PromptInput
-                  workspace={workspace}
-                  submit={handleSubmit}
-                  isStreaming={loadingResponse}
-                  sendCommand={sendCommand}
-                  attachments={files}
-                  centered={false}
-                />
+                {showPromptInput && (
+                  <PromptInput
+                    workspace={workspace}
+                    submit={handleSubmit}
+                    isStreaming={loadingResponse}
+                    sendCommand={sendCommand}
+                    attachments={files}
+                    centered={false}
+                  />
+                )}
               </div>
             </div>
           </DnDFileUploaderWrapper>
           <ChatTooltips />
         </div>
-        <SourcesSidebar />
-        <MemoriesSidebar workspace={workspace} />
-        <VelaEntitiesSidebar
-          workspace={activeWorkspace}
-          onWorkspaceUpdate={setActiveWorkspace}
-        />
+        {!embedded && <SourcesSidebar />}
+        {!embedded && <MemoriesSidebar workspace={workspace} />}
+        {!embedded && (
+          <VelaEntitiesSidebar
+            workspace={activeWorkspace}
+            onWorkspaceUpdate={setActiveWorkspace}
+          />
+        )}
       </div>
     </ChatSidebarProvider>
   );

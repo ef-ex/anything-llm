@@ -104,11 +104,29 @@ function workspaceEndpoints(app) {
           additionalFields.chatProvider = "vela-dispatch";
         }
 
-        const { workspace, message } = await Workspace.new(
+        let { workspace, message } = await Workspace.new(
           workspaceName,
           user?.id,
           additionalFields
         );
+
+        if (workspace?.velaProjectId) {
+          const orchestratorRoleId = "orchestrator";
+          const routeResult = await velaApiRequest("role-presets/resolve", {
+            method: "POST",
+            body: { role_id: orchestratorRoleId },
+          });
+          const routeFields = {
+            velaRolePresetId: orchestratorRoleId,
+            chatProvider: "vela-dispatch",
+            router_id: null,
+          };
+          if (routeResult.ok && routeResult.data?.model_id) {
+            routeFields.chatModel = routeResult.data.model_id;
+          }
+          const applied = await Workspace.update(workspace.id, routeFields);
+          if (applied.workspace) workspace = applied.workspace;
+        }
 
         if (workspace?.velaProjectId) {
           const grantResult = await velaApiRequest(

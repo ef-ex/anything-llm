@@ -60,7 +60,9 @@ export function saveOrchestratorChatDraft(workspaceSlug, threadSlug, history) {
 export function loadOrchestratorChatDraft(workspaceSlug, threadSlug) {
   if (!workspaceSlug) return null;
   try {
-    const raw = sessionStorage.getItem(orchestratorChatDraftKey(workspaceSlug, threadSlug));
+    const raw = sessionStorage.getItem(
+      orchestratorChatDraftKey(workspaceSlug, threadSlug)
+    );
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -69,7 +71,9 @@ export function loadOrchestratorChatDraft(workspaceSlug, threadSlug) {
 
 export function clearOrchestratorChatDraft(workspaceSlug, threadSlug) {
   if (!workspaceSlug) return;
-  sessionStorage.removeItem(orchestratorChatDraftKey(workspaceSlug, threadSlug));
+  sessionStorage.removeItem(
+    orchestratorChatDraftKey(workspaceSlug, threadSlug)
+  );
 }
 
 /** Main thread slug for orchestrator session when viewing a worker sub-thread. */
@@ -80,15 +84,36 @@ export function resolveOrchestratorParentThreadSlug(workspaceSlug, threadSlug) {
   return entry?.parentThreadSlug ?? threadSlug;
 }
 
+/** Alias used by split layout: anchor main thread when route is a worker sub-thread. */
+export function resolveOrchestratorMainThreadSlug(workspaceSlug, threadSlug) {
+  return resolveOrchestratorParentThreadSlug(workspaceSlug, threadSlug);
+}
+
+/** Role shown in chat header for the active thread. */
+export function effectiveRoleIdForThread(workspace, workspaceSlug, threadSlug) {
+  if (!workspace?.velaProjectId) return null;
+  const map = loadWorkerThreadMap(workspaceSlug);
+  const entry = Object.values(map).find((e) => e.threadSlug === threadSlug);
+  if (entry?.roleId) return entry.roleId;
+  return workspace.velaRolePresetId || "orchestrator";
+}
+
 /** Update in-flight pending assistant + reasoning in sessionStorage (survives thread navigation). */
-export function patchOrchestratorPendingInDraft(workspaceSlug, threadSlug, run) {
+export function patchOrchestratorPendingInDraft(
+  workspaceSlug,
+  threadSlug,
+  run
+) {
   if (!workspaceSlug || !threadSlug || !run) return;
   const draft = loadOrchestratorChatDraft(workspaceSlug, threadSlug);
-  if (!Array.isArray(draft) || !draft.some((m) => m?.velaOrchestratorPending)) return;
+  if (!Array.isArray(draft) || !draft.some((m) => m?.velaOrchestratorPending))
+    return;
 
   const reason =
     orchestratorLiveStatusText(run) ||
-    (run.status === "queued" || run.status === "running" ? "Vela is thinking…" : "");
+    (run.status === "queued" || run.status === "running"
+      ? "Vela is thinking…"
+      : "");
 
   const next = draft.map((m) =>
     m.velaOrchestratorPending
@@ -109,7 +134,11 @@ export function patchOrchestratorPendingInDraft(workspaceSlug, threadSlug, run) 
 }
 
 /** Persist completed turn in draft until server history catches up on next load. */
-export function saveOrchestratorChatDraftFinal(workspaceSlug, threadSlug, history) {
+export function saveOrchestratorChatDraftFinal(
+  workspaceSlug,
+  threadSlug,
+  history
+) {
   if (!workspaceSlug || !Array.isArray(history)) return;
   const finalized = history.map((m) => {
     if (!m?.velaOrchestratorPending && !m?.pending) return m;
@@ -152,7 +181,8 @@ function enrichOrchestratorMessageFields(target, source) {
   return {
     ...target,
     velaRoutingReason: target.velaRoutingReason || source.velaRoutingReason,
-    velaOrchestratorRunId: target.velaOrchestratorRunId || source.velaOrchestratorRunId,
+    velaOrchestratorRunId:
+      target.velaOrchestratorRunId || source.velaOrchestratorRunId,
   };
 }
 
@@ -163,13 +193,17 @@ export function mergeOrchestratorChatHistory(serverHistory, draft) {
   if (!Array.isArray(serverHistory) || serverHistory.length === 0) {
     return draft;
   }
-  const draftActive = draft.some((m) => m?.pending || m?.velaOrchestratorPending);
+  const draftActive = draft.some(
+    (m) => m?.pending || m?.velaOrchestratorPending
+  );
   if (draftActive) return draft;
 
   const draftByUuid = Object.fromEntries(
     draft.filter((m) => m?.uuid).map((m) => [m.uuid, m])
   );
-  const merged = serverHistory.map((m) => enrichOrchestratorMessageFields(m, draftByUuid[m.uuid]));
+  const merged = serverHistory.map((m) =>
+    enrichOrchestratorMessageFields(m, draftByUuid[m.uuid])
+  );
 
   if (draft.length > merged.length) return draft;
   if (draft.length === merged.length) {
@@ -194,11 +228,13 @@ export function syncWorkerThreadLiveDraft(workspaceSlug, run) {
 
   const role = roleDisplayName(run.role_id);
   const inProgress =
-    run.status === "classifying" || run.status === "queued" || run.status === "running";
+    run.status === "classifying" ||
+    run.status === "queued" ||
+    run.status === "running";
   const summary =
-    buildWorkerThreadSummary(run) ||
-    `${role} is working on your request…`;
-  const reasoning = orchestratorRoutingReason(run) || orchestratorLiveStatusText(run);
+    buildWorkerThreadSummary(run) || `${role} is working on your request…`;
+  const reasoning =
+    orchestratorRoutingReason(run) || orchestratorLiveStatusText(run);
 
   saveOrchestratorChatDraft(workspaceSlug, link.threadSlug, [
     {
@@ -254,7 +290,9 @@ export function saveWorkerParentForRun(workspaceSlug, runId, parentThreadSlug) {
 export function loadWorkerParentForRun(workspaceSlug, runId) {
   if (!workspaceSlug || !runId) return null;
   try {
-    const raw = sessionStorage.getItem(workerParentHintKey(workspaceSlug, runId));
+    const raw = sessionStorage.getItem(
+      workerParentHintKey(workspaceSlug, runId)
+    );
     return raw === null ? null : raw;
   } catch {
     return null;
@@ -270,7 +308,9 @@ export function sessionIdToParentThreadSlug(sessionId, workspaceSlug) {
 
 function workerParentNeedsRepair(entry) {
   if (!entry?.runId && !entry?.threadSlug) return false;
-  return entry.parentThreadSlug === null || entry.parentThreadSlug === undefined;
+  return (
+    entry.parentThreadSlug === null || entry.parentThreadSlug === undefined
+  );
 }
 
 function resolveWorkerParentSlug(workspaceSlug, runId, parentThreadSlug) {
@@ -321,7 +361,9 @@ export async function repairWorkerThreadParentsAsync(workspaceSlug) {
   if (!workspaceSlug) return false;
   let changed = repairWorkerThreadParents(workspaceSlug);
   const map = loadWorkerThreadMap(workspaceSlug);
-  const pending = Object.entries(map).filter(([, entry]) => workerParentNeedsRepair(entry));
+  const pending = Object.entries(map).filter(([, entry]) =>
+    workerParentNeedsRepair(entry)
+  );
   if (pending.length === 0) return changed;
 
   await Promise.all(
@@ -332,7 +374,10 @@ export async function repairWorkerThreadParentsAsync(workspaceSlug) {
           includeEvents: false,
         });
         if (!run?.session_id) return;
-        const parent = sessionIdToParentThreadSlug(run.session_id, workspaceSlug);
+        const parent = sessionIdToParentThreadSlug(
+          run.session_id,
+          workspaceSlug
+        );
         entry.parentThreadSlug = parent;
         saveWorkerParentForRun(workspaceSlug, runId, parent);
         changed = true;
@@ -378,7 +423,10 @@ const _workerThreadCreatePromises = new Map();
  * Create a workspace thread for an orchestrator worker run (artist sub-session).
  * Dedupes concurrent callers (poll + sync) per run_id.
  */
-export async function ensureWorkerThread(workspaceSlug, { run, parentThreadSlug = null }) {
+export async function ensureWorkerThread(
+  workspaceSlug,
+  { run, parentThreadSlug = null }
+) {
   if (!workspaceSlug || !run?.run_id || !run.role_id) return null;
   if (run.role_id === "orchestrator") return null;
 
@@ -433,7 +481,9 @@ export async function ensureWorkerThread(workspaceSlug, { run, parentThreadSlug 
     saveWorkerParentForRun(workspaceSlug, run.run_id, effectiveParent);
     saveWorkerThreadMap(workspaceSlug, latestMap);
     window.dispatchEvent(
-      new CustomEvent(VELA_WORKER_THREAD_EVENT, { detail: { workspaceSlug, ...entry } })
+      new CustomEvent(VELA_WORKER_THREAD_EVENT, {
+        detail: { workspaceSlug, ...entry },
+      })
     );
     return entry;
   })();
@@ -472,7 +522,9 @@ export function buildWorkerThreadSummary(run) {
 
   if (run.steps?.length > 0) {
     const stepLines = run.steps.map((s) => {
-      const log = s.log_lines?.length ? s.log_lines[s.log_lines.length - 1] : "";
+      const log = s.log_lines?.length
+        ? s.log_lines[s.log_lines.length - 1]
+        : "";
       return `- ${s.step_key}: ${s.status}${log ? ` — ${log}` : ""}`;
     });
     parts.push(`**What happened**\n\n${stepLines.join("\n")}`);
@@ -546,7 +598,9 @@ export function sortThreadsWithWorkerChildren(threads, workspaceSlug) {
 
 export function loadStoredRuns(workspaceSlug, threadSlug) {
   try {
-    const raw = sessionStorage.getItem(orchestratorSessionKey(workspaceSlug, threadSlug));
+    const raw = sessionStorage.getItem(
+      orchestratorSessionKey(workspaceSlug, threadSlug)
+    );
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -560,7 +614,12 @@ export function saveStoredRuns(workspaceSlug, threadSlug, runsByParentId) {
   );
 }
 
-export function upsertStoredRun(workspaceSlug, threadSlug, parentMessageId, run) {
+export function upsertStoredRun(
+  workspaceSlug,
+  threadSlug,
+  parentMessageId,
+  run
+) {
   const map = loadStoredRuns(workspaceSlug, threadSlug);
   for (const key of Object.keys(map)) {
     if (map[key]?.run_id === run?.run_id && key !== parentMessageId) {
@@ -571,7 +630,12 @@ export function upsertStoredRun(workspaceSlug, threadSlug, parentMessageId, run)
   saveStoredRuns(workspaceSlug, threadSlug, map);
 }
 
-const TERMINAL = new Set(["completed", "failed", "blocked", "needs_user_input"]);
+const TERMINAL = new Set([
+  "completed",
+  "failed",
+  "blocked",
+  "needs_user_input",
+]);
 const ACTIVE = new Set(["classifying", "queued", "running"]);
 
 export function isTerminalStatus(status) {
@@ -584,25 +648,30 @@ export function isActiveOrchestratorStatus(status) {
 
 export function formatOrchestratorModelLabel(modelId) {
   if (!modelId) return "";
-  return String(modelId).replace(/^cursor-acp\//, "").trim();
+  return String(modelId)
+    .replace(/^cursor-acp\//, "")
+    .trim();
 }
 
 export function findOpenClarificationRun(runsByParentId) {
   if (!runsByParentId || typeof runsByParentId !== "object") return null;
   return (
-    Object.values(runsByParentId).find((run) => run?.status === "needs_user_input") ||
-    null
+    Object.values(runsByParentId).find(
+      (run) => run?.status === "needs_user_input"
+    ) || null
   );
 }
 
 export function orchestratorRunForUserMessage(runsByParentId, message) {
   if (!message || !runsByParentId) return null;
-  const key = message.uuid || (message.chatId != null ? String(message.chatId) : null);
+  const key =
+    message.uuid || (message.chatId != null ? String(message.chatId) : null);
   if (key && runsByParentId[key]) return runsByParentId[key];
   if (message.velaOrchestratorRunId) {
     return (
-      Object.values(runsByParentId).find((r) => r?.run_id === message.velaOrchestratorRunId) ||
-      null
+      Object.values(runsByParentId).find(
+        (r) => r?.run_id === message.velaOrchestratorRunId
+      ) || null
     );
   }
   return null;
@@ -671,7 +740,9 @@ export function orchestratorRoutingReason(run) {
   // Unwrap single-line "Routing: … Readiness: … Handoff: …" into readable paragraphs
   if (/^Routing:/i.test(text)) {
     const segments = [];
-    const routingM = text.match(/Routing:\s*([\s\S]*?)(?=Readiness:|Handoff:|$)/i);
+    const routingM = text.match(
+      /Routing:\s*([\s\S]*?)(?=Readiness:|Handoff:|$)/i
+    );
     const readinessM = text.match(/Readiness:\s*([\s\S]*?)(?=Handoff:|$)/i);
     const handoffM = text.match(/Handoff:\s*([\s\S]*?)$/i);
     if (routingM?.[1]?.trim()) segments.push(routingM[1].trim());
@@ -833,7 +904,8 @@ export function orchestratorChatMessage(run) {
       return null;
     }
     const text = run.output_text.trim();
-    if (text.startsWith("{") || text.includes("```json")) return formatWorkerOutput(text);
+    if (text.startsWith("{") || text.includes("```json"))
+      return formatWorkerOutput(text);
     if (!isTechnicalOrchestratorCopy(text)) return text;
   }
 
@@ -867,7 +939,11 @@ export function shouldShowOrchestratorRunCard(run) {
   if (run.status === "needs_user_input") return false;
   if (isActiveOrchestratorStatus(run.status)) return true;
   if (run.role_id && run.role_id !== "orchestrator") {
-    return run.status === "completed" || run.status === "failed" || run.status === "blocked";
+    return (
+      run.status === "completed" ||
+      run.status === "failed" ||
+      run.status === "blocked"
+    );
   }
   return false;
 }
@@ -875,7 +951,9 @@ export function shouldShowOrchestratorRunCard(run) {
 export function orchestratorMainThreadReply(run) {
   const direct = orchestratorChatMessage(run);
   const workerCompleted =
-    run?.status === "completed" && run.role_id && run.role_id !== "orchestrator";
+    run?.status === "completed" &&
+    run.role_id &&
+    run.role_id !== "orchestrator";
   if (workerCompleted && (!direct || isWorkerMetadataHandoff(direct))) {
     const role = roleDisplayName(run.role_id);
     return `Vela handed this off to ${role}. Open the worker session (↳ in the thread list) for the full result.`;

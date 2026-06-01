@@ -621,6 +621,29 @@ function velaEndpoints(app) {
   );
 
   app.get(
+    "/workspace/:slug/vela/orchestration/roles/:roleId/artist-preview",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      const { roleId } = request.params;
+      const projectId = request.query.project_id || workspace.velaProjectId;
+      if (!projectId) {
+        return response.status(400).json({ error: "project_id is required" });
+      }
+      const result = await velaApiRequest(
+        `orchestration/roles/${encodeURIComponent(roleId)}/artist-preview`,
+        {
+          query: {
+            project_id: projectId,
+            workspace_id: request.query.workspace_id || workspace.slug,
+          },
+        }
+      );
+      return sendVelaResult(response, result);
+    }
+  );
+
+  app.get(
     "/workspace/:slug/vela/orchestration/runtime-bindings",
     [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
     async (request, response) => {

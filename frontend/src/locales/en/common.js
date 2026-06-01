@@ -1972,6 +1972,24 @@ const TRANSLATIONS = {
       },
     },
   },
+  vela: {
+    chat_context: {
+      role: "Role",
+      content: "content",
+      loading: "Content preview loading…",
+      show_more: "Show more",
+      summary: "Role summary",
+      worker_instructions: "Worker instructions",
+      rules: "Rules",
+      skills: "Skills",
+      mcp_servers: "MCP servers",
+      model_route: "Model route",
+    },
+    chat_layout: {
+      single: "Single",
+      split: "Split",
+    },
+  },
 };
 
 export default TRANSLATIONS;

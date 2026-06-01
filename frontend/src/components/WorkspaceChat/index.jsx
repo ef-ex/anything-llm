@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Workspace from "@/models/workspace";
 import LoadingChat from "./LoadingChat";
 import ChatContainer from "./ChatContainer";
+import SplitChatLayout from "./SplitChatLayout";
 import paths from "@/utils/paths";
 import ModalWrapper from "../ModalWrapper";
 import { useParams } from "react-router-dom";
@@ -16,15 +17,43 @@ import { OrchestratorChatProvider } from "@/contexts/OrchestratorChatContext";
 import {
   loadOrchestratorChatDraft,
   mergeOrchestratorChatHistory,
+  resolveOrchestratorMainThreadSlug,
 } from "@/utils/orchestratorRuns";
+import {
+  CHAT_LAYOUT_SINGLE,
+  CHAT_LAYOUT_SPLIT,
+  loadChatLayoutMode,
+  saveChatLayoutMode,
+} from "@/utils/splitChatLayout";
 
 export default function WorkspaceChat({ loading, workspace }) {
   useWatchForAutoPlayAssistantTTSResponse();
   const { threadSlug = null } = useParams();
-  // Stores { key, workspace, history } currently rendered. Lags the props so
-  // the previous chat stays mounted until the next one's history is ready,
-  // avoiding a skeleton/loader flash on workspace/thread switches.
+  const [layoutMode, setLayoutMode] = useState(CHAT_LAYOUT_SINGLE);
   const [loaded, setLoaded] = useState(null);
+
+  const velaBound = !!workspace?.velaProjectId;
+  const mainThreadSlug = useMemo(
+    () =>
+      velaBound
+        ? resolveOrchestratorMainThreadSlug(workspace?.slug, threadSlug)
+        : threadSlug,
+    [velaBound, workspace?.slug, threadSlug]
+  );
+
+  useEffect(() => {
+    if (!workspace?.slug) return;
+    setLayoutMode(loadChatLayoutMode(workspace.slug));
+  }, [workspace?.slug]);
+
+  const handleLayoutModeChange = useCallback(
+    (mode) => {
+      if (!workspace?.slug) return;
+      setLayoutMode(mode);
+      saveChatLayoutMode(workspace.slug, mode);
+    },
+    [workspace?.slug]
+  );
 
   useEffect(() => {
     if (loading || !workspace?.slug) return;
@@ -72,6 +101,8 @@ export default function WorkspaceChat({ loading, workspace }) {
     }
     getHistory();
   }, [workspace, loading, threadSlug]);
+
+  const splitActive = velaBound && layoutMode === CHAT_LAYOUT_SPLIT;
 
   const hasPendingMessage = !!sessionStorage.getItem(PENDING_HOME_MESSAGE);
   if (loaded === null) {
@@ -122,6 +153,11 @@ export default function WorkspaceChat({ loading, workspace }) {
   }
 
   setEventDelegatorForCodeSnippets();
+
+  const orchestratorThreadSlug = splitActive
+    ? mainThreadSlug
+    : loaded.threadSlug;
+
   return (
     <TTSProvider>
       <DnDFileUploaderProvider
@@ -130,18 +166,42 @@ export default function WorkspaceChat({ loading, workspace }) {
       >
         <OrchestratorChatProvider
           workspace={loaded.workspace}
-          threadSlug={loaded.threadSlug}
+          threadSlug={orchestratorThreadSlug}
         >
-          <ChatContainer
-            key={loaded.key}
-            workspace={loaded.workspace}
-            threadSlug={loaded.threadSlug}
-            knownHistory={loaded.history}
-          />
+          {splitActive ? (
+            <div
+              style={{ height: isMobileHeight() }}
+              className="relative flex md:ml-[2px] md:mr-[16px] md:my-[16px] w-full h-full z-[2]"
+            >
+              <div className="flex-1 min-w-0 relative md:rounded-[16px] bg-zinc-900 light:bg-white h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border">
+                <SplitChatLayout
+                  workspace={loaded.workspace}
+                  mainThreadSlug={mainThreadSlug}
+                  layoutMode={layoutMode}
+                  onLayoutModeChange={handleLayoutModeChange}
+                />
+              </div>
+            </div>
+          ) : (
+            <ChatContainer
+              key={loaded.key}
+              workspace={loaded.workspace}
+              threadSlug={loaded.threadSlug}
+              knownHistory={loaded.history}
+              layoutMode={layoutMode}
+              onLayoutModeChange={handleLayoutModeChange}
+              showLayoutToggle={velaBound}
+            />
+          )}
         </OrchestratorChatProvider>
       </DnDFileUploaderProvider>
     </TTSProvider>
   );
+}
+
+function isMobileHeight() {
+  if (typeof window === "undefined") return "100%";
+  return window.innerWidth < 768 ? "100%" : "calc(100% - 32px)";
 }
 
 // Enables us to safely markdown and sanitize all responses without risk of injection

@@ -14,16 +14,22 @@ async function parseJson(res) {
 
 const Vela = {
   status: async function (workspaceSlug) {
-    const res = await fetch(`${API_BASE}/workspace/${workspaceSlug}/vela/status`, {
-      headers: baseHeaders(),
-    });
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/status`,
+      {
+        headers: baseHeaders(),
+      }
+    );
     return parseJson(res);
   },
 
   listProjects: async function (workspaceSlug) {
-    const res = await fetch(`${API_BASE}/workspace/${workspaceSlug}/vela/projects`, {
-      headers: baseHeaders(),
-    });
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/projects`,
+      {
+        headers: baseHeaders(),
+      }
+    );
     return parseJson(res);
   },
 
@@ -84,7 +90,11 @@ const Vela = {
     return parseJson(res);
   },
 
-  pinEntity: async function (workspaceSlug, entityId, { version = null, file_ref_id = null } = {}) {
+  pinEntity: async function (
+    workspaceSlug,
+    entityId,
+    { version = null, file_ref_id = null } = {}
+  ) {
     const res = await fetch(
       `${API_BASE}/workspace/${workspaceSlug}/vela/entities/${entityId}/pin`,
       {
@@ -121,6 +131,21 @@ const Vela = {
     return parseJson(res);
   },
 
+  getRoleArtistPreview: async function (
+    workspaceSlug,
+    roleId,
+    { projectId = null } = {}
+  ) {
+    const params = new URLSearchParams();
+    if (projectId) params.set("project_id", projectId);
+    const qs = params.toString() ? `?${params}` : "";
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/orchestration/roles/${encodeURIComponent(roleId)}/artist-preview${qs}`,
+      { headers: baseHeaders() }
+    );
+    return parseJson(res);
+  },
+
   listRolePresets: async function (workspaceSlug) {
     const res = await fetch(
       `${API_BASE}/workspace/${workspaceSlug}/vela/role-presets`,
@@ -137,9 +162,12 @@ const Vela = {
   },
 
   getRolePresetAdmin: async function (id) {
-    const res = await fetch(`${API_BASE}/vela/admin/role-presets/${encodeURIComponent(id)}`, {
-      headers: baseHeaders(),
-    });
+    const res = await fetch(
+      `${API_BASE}/vela/admin/role-presets/${encodeURIComponent(id)}`,
+      {
+        headers: baseHeaders(),
+      }
+    );
     return parseJson(res);
   },
 
@@ -153,19 +181,25 @@ const Vela = {
   },
 
   updateRolePresetAdmin: async function (id, payload) {
-    const res = await fetch(`${API_BASE}/vela/admin/role-presets/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      headers: baseHeaders(),
-      body: JSON.stringify(payload),
-    });
+    const res = await fetch(
+      `${API_BASE}/vela/admin/role-presets/${encodeURIComponent(id)}`,
+      {
+        method: "PUT",
+        headers: baseHeaders(),
+        body: JSON.stringify(payload),
+      }
+    );
     return parseJson(res);
   },
 
   deleteRolePresetAdmin: async function (id) {
-    const res = await fetch(`${API_BASE}/vela/admin/role-presets/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      headers: baseHeaders(),
-    });
+    const res = await fetch(
+      `${API_BASE}/vela/admin/role-presets/${encodeURIComponent(id)}`,
+      {
+        method: "DELETE",
+        headers: baseHeaders(),
+      }
+    );
     if (res.status === 204) return { ok: true };
     return parseJson(res);
   },
@@ -177,7 +211,11 @@ const Vela = {
     return parseJson(res);
   },
 
-  resolveRolePreset: async function (workspaceSlug, roleId, requiredCapabilities = []) {
+  resolveRolePreset: async function (
+    workspaceSlug,
+    roleId,
+    requiredCapabilities = []
+  ) {
     const res = await fetch(
       `${API_BASE}/workspace/${workspaceSlug}/vela/role-presets/resolve`,
       {
@@ -246,15 +284,21 @@ const Vela = {
   },
 
   publish: async function (workspaceSlug, payload) {
-    const res = await fetch(`${API_BASE}/workspace/${workspaceSlug}/vela/publish`, {
-      method: "POST",
-      headers: baseHeaders(),
-      body: JSON.stringify(payload),
-    });
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/publish`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify(payload),
+      }
+    );
     return parseJson(res);
   },
 
-  cursorSubscriptionStatus: async function (workspaceSlug, { projectId = null } = {}) {
+  cursorSubscriptionStatus: async function (
+    workspaceSlug,
+    { projectId = null } = {}
+  ) {
     const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
     const res = await fetch(
       `${API_BASE}/workspace/${workspaceSlug}/vela/subscriptions/cursor/status${qs}`,
@@ -317,7 +361,11 @@ const Vela = {
     return parseJson(res);
   },
 
-  getOrchestratorRun: async function (workspaceSlug, runId, { includeEvents = true } = {}) {
+  getOrchestratorRun: async function (
+    workspaceSlug,
+    runId,
+    { includeEvents = true } = {}
+  ) {
     const qs = includeEvents ? "?include_events=true" : "?include_events=false";
     const res = await fetch(
       `${API_BASE}/workspace/${workspaceSlug}/vela/orchestrator/runs/${encodeURIComponent(runId)}${qs}`,
@@ -379,7 +427,10 @@ const Vela = {
 };
 
 /** Build @-reference string from entity type, name, version, and facets. */
-export function buildEntityReference(entity, { version, facets = ["brief"] } = {}) {
+export function buildEntityReference(
+  entity,
+  { version, facets = ["brief"] } = {}
+) {
   const type = entity.type || "asset";
   let ref = `@${type}:${entity.name}`;
   if (version) ref += `.${version}`;
@@ -399,7 +450,8 @@ export function formatContextCard(card) {
     return lines.join("\n");
   }
   lines.push(`Summary: ${card.summary || ""}`);
-  if (card.version) lines.push(`Version: ${card.version} (${card.version_source || ""})`);
+  if (card.version)
+    lines.push(`Version: ${card.version} (${card.version_source || ""})`);
   if (card.description) lines.push(`Description: ${card.description}`);
   if (card.facet_data?.brief) lines.push(`Brief: ${card.facet_data.brief}`);
   if (card.facet_data?.notes) lines.push(`Notes: ${card.facet_data.notes}`);
