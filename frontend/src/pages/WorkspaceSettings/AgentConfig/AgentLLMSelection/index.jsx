@@ -5,6 +5,10 @@ import { AVAILABLE_LLM_PROVIDERS } from "@/pages/GeneralSettings/LLMPreference";
 import { CaretUpDown, Gauge, MagnifyingGlass, X } from "@phosphor-icons/react";
 import AgentModelSelection from "../AgentModelSelection";
 import { useTranslation } from "react-i18next";
+import VelaHubProviderBanner from "@/components/VelaHubProviderBanner";
+import VelaHubResolvedRoute, {
+  hubControlsProviders,
+} from "@/components/VelaHubResolvedRoute";
 
 const ENABLED_PROVIDERS = [
   "openai",
@@ -109,6 +113,24 @@ export default function AgentLLMSelection({
   }, [searchQuery, selectedLLM]);
 
   const selectedLLMObject = LLMS.find((llm) => llm.value === selectedLLM);
+
+  if (hubControlsProviders) {
+    return (
+      <div className="border-b border-white/40 pb-8">
+        <VelaHubProviderBanner section="profiles" />
+        <VelaHubResolvedRoute
+          workspace={workspace}
+          roleId={workspace?.velaRolePresetId || null}
+        />
+        <input type="hidden" name="agentProvider" value="none" />
+        <p className="text-white text-opacity-60 text-xs font-medium mt-3">
+          Agent provider and model are resolved by Vela Hub routing policies and
+          role presets. Configure them in Vela Hub → AI Providers.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="border-b border-white/40 pb-8">
       {WARN_PERFORMANCE.includes(selectedLLM) && (

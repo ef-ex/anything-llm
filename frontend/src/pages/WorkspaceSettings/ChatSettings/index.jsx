@@ -8,6 +8,10 @@ import ChatPromptSettings from "./ChatPromptSettings";
 import ChatTemperatureSettings from "./ChatTemperatureSettings";
 import ChatModeSelection from "./ChatModeSelection";
 import WorkspaceLLMSelection from "./WorkspaceLLMSelection";
+import VelaHubProviderBanner from "@/components/VelaHubProviderBanner";
+import VelaHubResolvedRoute, {
+  hubControlsProviders,
+} from "@/components/VelaHubResolvedRoute";
 import ChatQueryRefusalResponse from "./ChatQueryRefusalResponse";
 import CTAButton from "@/components/lib/CTAButton";
 
@@ -62,11 +66,25 @@ export default function ChatSettings({ workspace }) {
             </CTAButton>
           </div>
         )}
-        <WorkspaceLLMSelection
-          settings={settings}
-          workspace={workspace}
-          setHasChanges={setHasChanges}
-        />
+        {hubControlsProviders ? (
+          <>
+            <VelaHubProviderBanner section="profiles" />
+            <VelaHubResolvedRoute
+              workspace={workspace}
+              roleId={workspace?.velaRolePresetId || null}
+            />
+            <input type="hidden" name="chatProvider" value="vela-dispatch" />
+            <p className="text-white text-opacity-60 text-xs font-medium">
+              Chat LLM is managed by Vela Hub when provider control is enabled.
+            </p>
+          </>
+        ) : (
+          <WorkspaceLLMSelection
+            settings={settings}
+            workspace={workspace}
+            setHasChanges={setHasChanges}
+          />
+        )}
         <ChatModeSelection
           workspace={workspace}
           setHasChanges={setHasChanges}

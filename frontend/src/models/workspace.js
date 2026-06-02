@@ -600,6 +600,31 @@ const Workspace = {
   },
 
   threads: WorkspaceThread,
+
+  /**
+   * M33/M34: resolved provider route from Vela Hub (read-only).
+   * @param {string} slug workspace slug
+   * @param {string} query e.g. "?role_id=pipeline-td"
+   */
+  getVelaProviderRoute: async function (slug, query = "") {
+    const q = query.startsWith("?") ? query : query ? `?${query}` : "";
+    try {
+      const res = await fetch(
+        `${API_BASE}/workspace/${slug}/vela/provider-route${q}`,
+        { headers: baseHeaders() }
+      );
+      const data = await safeJsonParse(res);
+      if (!res.ok) {
+        return {
+          route: null,
+          error: data?.error || res.statusText || "failed to resolve route",
+        };
+      }
+      return { route: data.route, source: data.source, error: null };
+    } catch (e) {
+      return { route: null, error: e.message };
+    }
+  },
 };
 
 export default Workspace;
