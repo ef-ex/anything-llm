@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react";
 import useUser from "@/hooks/useUser";
 import Workspace from "@/models/workspace";
+import VelaHubProviderBanner from "@/components/VelaHubProviderBanner";
 
 function StatusBadge({ ok, label }) {
   return (
@@ -277,6 +278,7 @@ export default function SubscriptionAccess() {
                 Configure subscription-backed models routed through Vela dispatch. Cursor is the first provider; credentials never go into AnythingLLM .env.
               </p>
             </div>
+            <VelaHubProviderBanner section="subscriptions" />
 
             {!velaAvailable && (
               <p className="text-sm text-orange-300 mb-4">

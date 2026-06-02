@@ -45,6 +45,7 @@ import MinimaxLogo from "@/media/llmprovider/minimax.png";
 import CerebrasLogo from "@/media/llmprovider/cerebras.png";
 
 import PreLoader from "@/components/Preloader";
+import VelaHubProviderBanner from "@/components/VelaHubProviderBanner";
 import ModelRouterOptions from "@/components/LLMSelection/ModelRouterOptions";
 import OpenAiOptions from "@/components/LLMSelection/OpenAiOptions";
 import GenericOpenAiOptions from "@/components/LLMSelection/GenericOpenAiOptions";
@@ -560,6 +561,7 @@ export default function GeneralLLMPreference() {
                   {t("llm.description")}
                 </p>
               </div>
+              <VelaHubProviderBanner section="profiles" />
               <div className="w-full justify-end flex">
                 {hasChanges && (
                   <CTAButton
