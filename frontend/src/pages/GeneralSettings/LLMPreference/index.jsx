@@ -450,6 +450,12 @@ export const AVAILABLE_LLM_PROVIDERS = [
 ];
 
 export const LLM_PREFERENCE_CHANGED_EVENT = "llm-preference-changed";
+
+const hubControlsProviders =
+  import.meta.env.VITE_VELA_HUB_CONTROLS_PROVIDERS !== "0" &&
+  import.meta.env.VITE_VELA_HUB_CONTROLS_PROVIDERS !== "false";
+const allowStockLlm = import.meta.env.VITE_VELA_ALLOW_STOCK_LLM === "1";
+
 export default function GeneralLLMPreference() {
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -562,6 +568,21 @@ export default function GeneralLLMPreference() {
                 </p>
               </div>
               <VelaHubProviderBanner section="profiles" />
+              {hubControlsProviders && !allowStockLlm ? (
+                <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-900/50 px-4 py-3 text-sm text-zinc-300">
+                  <p className="font-medium text-white mb-1">
+                    Vela Hub controls providers (M33)
+                  </p>
+                  <p>
+                    Stock AnythingLLM LLM API keys and provider selection are disabled.
+                    Linked workspaces use <code>vela-dispatch</code> and routes resolved in
+                    Vela Hub. Set <code>VELA_ALLOW_STOCK_LLM=1</code> for upstream parity
+                    testing only.
+                  </p>
+                </div>
+              ) : null}
+              {!(hubControlsProviders && !allowStockLlm) && (
+              <>
               <div className="w-full justify-end flex">
                 {hasChanges && (
                   <CTAButton
@@ -666,6 +687,8 @@ export default function GeneralLLMPreference() {
                     (llm) => llm.value === selectedLLM
                   )?.options?.(settings)}
               </div>
+              </>
+              )}
             </div>
           </form>
         </div>

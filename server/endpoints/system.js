@@ -6,6 +6,10 @@ const { purgeDocument, purgeFolder } = require("../utils/files/purgeDocument");
 const { getVectorDbClass } = require("../utils/helpers");
 const { updateENV, dumpENV } = require("../utils/helpers/updateENV");
 const {
+  blocksLlmEnvUpdate,
+  hubProviderBlockResponse,
+} = require("../utils/velaHubProviders");
+const {
   reqBody,
   makeJWT,
   userFromSession,
@@ -543,6 +547,9 @@ function systemEndpoints(app) {
     async (request, response) => {
       try {
         const body = reqBody(request);
+        if (blocksLlmEnvUpdate(body)) {
+          return response.status(409).json(hubProviderBlockResponse());
+        }
         const { newValues, error } = await updateENV(
           body,
           false,

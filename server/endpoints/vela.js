@@ -473,6 +473,73 @@ function velaEndpoints(app) {
     }
   );
 
+  app.get(
+    "/workspace/:slug/vela/provider-route",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      if (!workspace?.velaProjectId) {
+        return response.status(400).json({
+          error: "workspace is not linked to a Vela project",
+        });
+      }
+      const roleId =
+        request.query.role_id ||
+        workspace.velaRolePresetId ||
+        request.query.roleId;
+      const policyId = request.query.policy_id || request.query.policyId;
+      if (!policyId && !roleId) {
+        return response.status(400).json({
+          error: "role_id or policy_id query parameter required",
+        });
+      }
+      let resolveBody = {
+        project_id: workspace.velaProjectId,
+        role_id: roleId,
+      };
+      if (policyId) {
+        resolveBody = { policy_id: policyId };
+      }
+      let routingPolicyId = policyId;
+      if (!routingPolicyId && roleId) {
+        const presetResult = await velaApiRequest(`role-presets/${roleId}`);
+        if (presetResult.ok && presetResult.data?.routing_policy_id) {
+          routingPolicyId = presetResult.data.routing_policy_id;
+        }
+      }
+      if (routingPolicyId) {
+        const resolved = await velaApiRequest("provider-routing/resolve", {
+          method: "POST",
+          body: {
+            policy_id: routingPolicyId,
+            role_id: roleId,
+            project_id: workspace.velaProjectId,
+          },
+        });
+        if (resolved.ok) {
+          return response.status(200).json({
+            route: resolved.data,
+            source: "routing_policy",
+          });
+        }
+      }
+      if (roleId) {
+        const routeResult = await velaApiRequest("role-presets/resolve", {
+          method: "POST",
+          body: { role_id: roleId },
+        });
+        if (routeResult.ok) {
+          return response.status(200).json({
+            route: routeResult.data,
+            source: "role_preset",
+          });
+        }
+        return sendVelaResult(response, routeResult);
+      }
+      return response.status(400).json({ error: "could not resolve provider route" });
+    }
+  );
+
   app.post(
     "/workspace/:slug/vela/role-preset",
     [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
