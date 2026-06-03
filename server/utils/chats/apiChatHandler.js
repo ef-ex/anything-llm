@@ -10,6 +10,11 @@ const {
   grepAllSlashCommands,
 } = require("./index");
 const {
+  isVelaDispatchFastPath,
+  shouldIncludePinnedOnFastPath,
+  emptyVectorSearchResult,
+} = require("./velaDispatchFastPath");
+const {
   EphemeralAgentHandler,
   EphemeralEventListener,
 } = require("../agents/ephemeral");
@@ -234,8 +239,13 @@ async function chatSync({
 
   const VectorDb = getVectorDbClass();
   const messageLimit = workspace?.openAiHistory || 20;
-  const hasVectorizedSpace = await VectorDb.hasNamespace(workspace.slug);
-  const embeddingsCount = await VectorDb.namespaceCount(workspace.slug);
+  const fastPath = isVelaDispatchFastPath(workspace, chatMode);
+  let hasVectorizedSpace = false;
+  let embeddingsCount = 0;
+  if (!fastPath) {
+    hasVectorizedSpace = await VectorDb.hasNamespace(workspace.slug);
+    embeddingsCount = await VectorDb.namespaceCount(workspace.slug);
+  }
 
   // User is trying to query-mode chat a workspace that has no data in it - so
   // we should exit early as no information can be found under these conditions.
@@ -283,42 +293,47 @@ async function chatSync({
     apiSessionId: sessionId,
   });
 
-  await new DocumentManager({
-    workspace,
-    maxTokens: LLMConnector.promptWindowLimit(),
-  })
-    .pinnedDocs()
-    .then((pinnedDocs) => {
-      pinnedDocs.forEach((doc) => {
-        const { pageContent, ...metadata } = doc;
-        pinnedDocIdentifiers.push(sourceIdentifier(doc));
-        contextTexts.push(doc.pageContent);
-        sources.push({
-          text:
-            pageContent.slice(0, 1_000) +
-            "...continued on in source document...",
-          ...metadata,
+  const includePinned = !fastPath || shouldIncludePinnedOnFastPath(attachments);
+  if (includePinned) {
+    await new DocumentManager({
+      workspace,
+      maxTokens: LLMConnector.promptWindowLimit(),
+    })
+      .pinnedDocs()
+      .then((pinnedDocs) => {
+        pinnedDocs.forEach((doc) => {
+          const { pageContent, ...metadata } = doc;
+          pinnedDocIdentifiers.push(sourceIdentifier(doc));
+          contextTexts.push(doc.pageContent);
+          sources.push({
+            text:
+              pageContent.slice(0, 1_000) +
+              "...continued on in source document...",
+            ...metadata,
+          });
         });
       });
-    });
+  }
 
   const processedAttachments = await processDocumentAttachments(attachments);
   const parsedAttachments = processedAttachments.parsedDocuments;
   attachments = processedAttachments.imageAttachments;
-  parsedAttachments.forEach((doc) => {
-    if (doc.pageContent) {
-      contextTexts.push(doc.pageContent);
-      const { pageContent, ...metadata } = doc;
-      sources.push({
-        text:
-          pageContent.slice(0, 1_000) + "...continued on in source document...",
-        ...metadata,
-      });
-    }
-  });
+  if (includePinned) {
+    parsedAttachments.forEach((doc) => {
+      if (doc.pageContent) {
+        contextTexts.push(doc.pageContent);
+        const { pageContent, ...metadata } = doc;
+        sources.push({
+          text:
+            pageContent.slice(0, 1_000) + "...continued on in source document...",
+          ...metadata,
+        });
+      }
+    });
+  }
 
   const vectorSearchResults =
-    embeddingsCount !== 0
+    !fastPath && embeddingsCount !== 0
       ? await VectorDb.performSimilaritySearch({
           namespace: workspace.slug,
           input: message,
@@ -328,11 +343,7 @@ async function chatSync({
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: workspace?.vectorSearchMode === "rerank",
         })
-      : {
-          contextTexts: [],
-          sources: [],
-          message: null,
-        };
+      : emptyVectorSearchResult();
 
   // Failed similarity search if it was run at all and failed.
   if (!!vectorSearchResults.message) {
@@ -600,8 +611,13 @@ async function streamChat({
 
   const VectorDb = getVectorDbClass();
   const messageLimit = workspace?.openAiHistory || 20;
-  const hasVectorizedSpace = await VectorDb.hasNamespace(workspace.slug);
-  const embeddingsCount = await VectorDb.namespaceCount(workspace.slug);
+  const fastPath = isVelaDispatchFastPath(workspace, chatMode);
+  let hasVectorizedSpace = false;
+  let embeddingsCount = 0;
+  if (!fastPath) {
+    hasVectorizedSpace = await VectorDb.hasNamespace(workspace.slug);
+    embeddingsCount = await VectorDb.namespaceCount(workspace.slug);
+  }
 
   // User is trying to query-mode chat a workspace that has no data in it - so
   // we should exit early as no information can be found under these conditions.
@@ -659,42 +675,47 @@ async function streamChat({
   // it will undergo prompt compression anyway to make it work. If there is so much pinned that the context here is bigger than
   // what the model can support - it would get compressed anyway and that really is not the point of pinning. It is really best
   // suited for high-context models.
-  await new DocumentManager({
-    workspace,
-    maxTokens: LLMConnector.promptWindowLimit(),
-  })
-    .pinnedDocs()
-    .then((pinnedDocs) => {
-      pinnedDocs.forEach((doc) => {
-        const { pageContent, ...metadata } = doc;
-        pinnedDocIdentifiers.push(sourceIdentifier(doc));
-        contextTexts.push(doc.pageContent);
-        sources.push({
-          text:
-            pageContent.slice(0, 1_000) +
-            "...continued on in source document...",
-          ...metadata,
+  const includePinned = !fastPath || shouldIncludePinnedOnFastPath(attachments);
+  if (includePinned) {
+    await new DocumentManager({
+      workspace,
+      maxTokens: LLMConnector.promptWindowLimit(),
+    })
+      .pinnedDocs()
+      .then((pinnedDocs) => {
+        pinnedDocs.forEach((doc) => {
+          const { pageContent, ...metadata } = doc;
+          pinnedDocIdentifiers.push(sourceIdentifier(doc));
+          contextTexts.push(doc.pageContent);
+          sources.push({
+            text:
+              pageContent.slice(0, 1_000) +
+              "...continued on in source document...",
+            ...metadata,
+          });
         });
       });
-    });
+  }
 
   const processedAttachments = await processDocumentAttachments(attachments);
   const parsedAttachments = processedAttachments.parsedDocuments;
   attachments = processedAttachments.imageAttachments;
-  parsedAttachments.forEach((doc) => {
-    if (doc.pageContent) {
-      contextTexts.push(doc.pageContent);
-      const { pageContent, ...metadata } = doc;
-      sources.push({
-        text:
-          pageContent.slice(0, 1_000) + "...continued on in source document...",
-        ...metadata,
-      });
-    }
-  });
+  if (includePinned) {
+    parsedAttachments.forEach((doc) => {
+      if (doc.pageContent) {
+        contextTexts.push(doc.pageContent);
+        const { pageContent, ...metadata } = doc;
+        sources.push({
+          text:
+            pageContent.slice(0, 1_000) + "...continued on in source document...",
+          ...metadata,
+        });
+      }
+    });
+  }
 
   const vectorSearchResults =
-    embeddingsCount !== 0
+    !fastPath && embeddingsCount !== 0
       ? await VectorDb.performSimilaritySearch({
           namespace: workspace.slug,
           input: message,
@@ -704,11 +725,7 @@ async function streamChat({
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: workspace?.vectorSearchMode === "rerank",
         })
-      : {
-          contextTexts: [],
-          sources: [],
-          message: null,
-        };
+      : emptyVectorSearchResult();
 
   // Failed similarity search if it was run at all and failed.
   if (!!vectorSearchResults.message) {

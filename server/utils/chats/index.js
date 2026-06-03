@@ -89,6 +89,40 @@ async function recentChatHistory({
  * @param {{prompt?: string, rawHistory?: object[]}} [opts] - current user message + chat history, used for reranking injected memories
  * @returns {Promise<string>}
  */
+function shouldSkipVelaContextFetch(workspace) {
+  const effectiveProvider = workspace?.chatProvider || process.env.LLM_PROVIDER;
+  return effectiveProvider === "vela-dispatch";
+}
+
+async function maybePrependVelaContext(workspace, user, systemPrompt) {
+  if (shouldSkipVelaContextFetch(workspace)) {
+    if (!maybePrependVelaContext._loggedDispatchSkip) {
+      console.debug(
+        "[vela] chatPrompt skipping fetchVelaContext for vela-dispatch (Hub injects context on dispatch)"
+      );
+      maybePrependVelaContext._loggedDispatchSkip = true;
+    }
+    return systemPrompt;
+  }
+
+  try {
+    const { fetchVelaContext, buildContextPrefix } = require("../velaContext");
+    const velaCtx = await fetchVelaContext({
+      userId: user?.id ? String(user.id) : null,
+      projectId: workspace?.velaProjectId || null,
+    });
+    if (velaCtx) {
+      const prefix = buildContextPrefix(velaCtx);
+      if (prefix) {
+        return prefix + "\n\n" + systemPrompt;
+      }
+    }
+  } catch {
+    // Vela context is optional — never block chat on its failure
+  }
+  return systemPrompt;
+}
+
 async function chatPrompt(workspace, user = null, opts = {}) {
   const { SystemSettings } = require("../../models/systemSettings");
   const { promptWithMemories } = require("../memories");
@@ -100,23 +134,7 @@ async function chatPrompt(workspace, user = null, opts = {}) {
     workspace?.id
   );
 
-  // Fetch Vela project-aware context and prepend to system prompt
-  let enrichedPrompt = systemPrompt;
-  try {
-    const { fetchVelaContext, buildContextPrefix } = require("../velaContext");
-    const velaCtx = await fetchVelaContext({
-      userId: user?.id ? String(user.id) : null,
-      projectId: workspace?.velaProjectId || null,
-    });
-    if (velaCtx) {
-      const prefix = buildContextPrefix(velaCtx);
-      if (prefix) {
-        enrichedPrompt = prefix + "\n\n" + systemPrompt;
-      }
-    }
-  } catch {
-    // Vela context is optional — never block chat on its failure
-  }
+  const enrichedPrompt = await maybePrependVelaContext(workspace, user, systemPrompt);
 
   return promptWithMemories({
     systemPrompt: enrichedPrompt,
@@ -141,6 +159,8 @@ module.exports = {
   sourceIdentifier,
   recentChatHistory,
   chatPrompt,
+  maybePrependVelaContext,
+  shouldSkipVelaContextFetch,
   grepCommand,
   grepAllSlashCommands,
   VALID_COMMANDS,

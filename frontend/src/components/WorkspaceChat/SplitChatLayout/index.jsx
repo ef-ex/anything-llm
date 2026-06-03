@@ -5,9 +5,12 @@ import { isMobile } from "react-device-detect";
 import ChatContainer from "../ChatContainer";
 import ChatContextHeader from "../ChatContainer/ChatContextHeader";
 import paths from "@/utils/paths";
+import Workspace from "@/models/workspace";
 import Vela from "@/models/vela";
 import {
+  loadOrchestratorChatDraft,
   loadWorkerThreadMap,
+  mergeOrchestratorChatHistory,
   repairWorkerThreadParentsAsync,
   roleDisplayName,
   VELA_WORKER_THREAD_EVENT,
@@ -40,6 +43,7 @@ export default function SplitChatLayout({
     loadWorkerThreadMap(workspace?.slug)
   );
   const [runs, setRuns] = useState([]);
+  const [historiesByPaneId, setHistoriesByPaneId] = useState({});
   const [focusedPaneId, setFocusedPaneId] = useState(null);
 
   const refreshWorkerMap = useCallback(() => {
@@ -109,6 +113,33 @@ export default function SplitChatLayout({
       }),
     [workspace?.slug, mainThreadSlug, workerMap, runs]
   );
+
+  useEffect(() => {
+    if (!workspace?.slug || panes.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const next = {};
+      await Promise.all(
+        panes.map(async (pane) => {
+          const draft =
+            workspace.velaProjectId != null
+              ? loadOrchestratorChatDraft(workspace.slug, pane.threadSlug)
+              : null;
+          const serverHistory = pane.threadSlug
+            ? await Workspace.threads.chatHistory(
+                workspace.slug,
+                pane.threadSlug
+              )
+            : await Workspace.chatHistory(workspace.slug);
+          next[pane.id] = mergeOrchestratorChatHistory(serverHistory, draft);
+        })
+      );
+      if (!cancelled) setHistoriesByPaneId(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace?.slug, workspace?.velaProjectId, panes]);
 
   const { rows, cols } = computeSplitGrid(panes.length);
   const gridStyle = isMobile
@@ -183,6 +214,7 @@ export default function SplitChatLayout({
                   key={pane.id}
                   workspace={workspace}
                   threadSlug={pane.threadSlug}
+                  knownHistory={historiesByPaneId[pane.id] ?? []}
                   embedded
                   showPromptInput={pane.isMain}
                   hideContextHeader

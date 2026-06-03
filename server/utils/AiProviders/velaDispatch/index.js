@@ -116,7 +116,7 @@ async function* parseOpenAiSseStream(responseBody) {
  * Resolves project-scoped credentials on the Vela backend — no provider secrets in AnythingLLM .env.
  */
 class VelaLLMConnector {
-  constructor({ workspace, modelPreference = null } = {}) {
+  constructor({ workspace, modelPreference = null, userId = null } = {}) {
     if (!VELA_API_URL) {
       throw new Error(
         "Vela dispatch requires VELA_API_URL to be configured on the AnythingLLM server."
@@ -130,6 +130,7 @@ class VelaLLMConnector {
 
     this.className = "VelaLLMConnector";
     this.workspace = workspace;
+    this.userId = userId;
     this.model = modelPreference || workspace.chatModel || "gpt-4o-mini";
     this.embedder = new NativeEmbedder();
     this.defaultTemp = 0.7;
@@ -223,10 +224,30 @@ class VelaLLMConnector {
         stream: !!stream,
       },
     };
+    if (this.userId) payload.user_id = this.userId;
     if (modelId && modelId !== "vela-dispatch") {
       payload.model_id = modelId;
     }
     return payload;
+  }
+
+  #dispatchTimingFromHeaders(headers) {
+    if (!headers) return {};
+    const timing = {};
+    const map = {
+      prepare_ms: "x-vela-prepare-ms",
+      context_ms: "x-vela-context-ms",
+      provider_ttfb_ms: "x-vela-provider-ttfb-ms",
+      total_ms: "x-vela-total-ms",
+    };
+    for (const [key, headerName] of Object.entries(map)) {
+      const raw = headers.get?.(headerName) ?? headers[headerName];
+      if (raw != null && raw !== "") {
+        const value = Number(raw);
+        if (!Number.isNaN(value)) timing[key] = value;
+      }
+    }
+    return timing;
   }
 
   async #velaFetch(path, body, { stream = false } = {}) {
@@ -293,6 +314,9 @@ class VelaLLMConnector {
         timestamp: new Date(),
         vela_provider_id: payload.metadata?.provider_id,
         vela_credential_scope: payload.metadata?.credential_scope,
+        vela_prepare_ms: payload.metadata?.prepare_ms,
+        vela_context_ms: payload.metadata?.context_ms,
+        vela_total_ms: payload.metadata?.total_ms,
       },
     };
   }
@@ -308,6 +332,7 @@ class VelaLLMConnector {
       throw new Error(await this.#parseDispatchError(resp));
     }
 
+    const dispatchTiming = this.#dispatchTimingFromHeaders(resp.headers);
     const rawStream = {
       [Symbol.asyncIterator]() {
         return parseOpenAiSseStream(resp.body);
@@ -317,6 +342,7 @@ class VelaLLMConnector {
       [Symbol.asyncIterator]() {
         return normalizeOpenAiStreamDeltas(rawStream);
       },
+      metadata: dispatchTiming,
     };
 
     return LLMPerformanceMonitor.measureStream({
@@ -329,14 +355,45 @@ class VelaLLMConnector {
   }
 
   handleStream(response, stream, responseProps) {
-    return handleDefaultStreamResponseV2(response, stream, responseProps);
+    const result = handleDefaultStreamResponseV2(response, stream, responseProps);
+    if (stream?.metadata && stream?.metrics) {
+      Object.assign(stream.metrics, {
+        vela_prepare_ms: stream.metadata.prepare_ms,
+        vela_context_ms: stream.metadata.context_ms,
+        vela_provider_ttfb_ms: stream.metadata.provider_ttfb_ms,
+        vela_total_ms: stream.metadata.total_ms,
+      });
+    }
+    return result;
+  }
+
+  #embedBlocked() {
+    if (process.env.VELA_DISPATCH_SKIP_RAG === "0") return false;
+    const provider = this.workspace?.chatProvider || process.env.LLM_PROVIDER;
+    return provider === "vela-dispatch";
   }
 
   async embedTextInput(textInput) {
+    if (this.#embedBlocked()) {
+      this.log(
+        "embedTextInput blocked on vela-dispatch fast path (set VELA_DISPATCH_SKIP_RAG=0 to allow)"
+      );
+      throw new Error(
+        "Embedding is disabled for vela-dispatch chat mode (VELA_DISPATCH_SKIP_RAG)"
+      );
+    }
     return await this.embedder.embedTextInput(textInput);
   }
 
   async embedChunks(textChunks = []) {
+    if (this.#embedBlocked()) {
+      this.log(
+        "embedChunks blocked on vela-dispatch fast path (set VELA_DISPATCH_SKIP_RAG=0 to allow)"
+      );
+      throw new Error(
+        "Embedding is disabled for vela-dispatch chat mode (VELA_DISPATCH_SKIP_RAG)"
+      );
+    }
     return await this.embedder.embedChunks(textChunks);
   }
 }

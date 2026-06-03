@@ -6,6 +6,11 @@ const { getVectorDbClass, resolveProviderConnector } = require("../helpers");
 const { writeResponseChunk } = require("../helpers/chat/responses");
 const { grepAgents } = require("./agents");
 const {
+  isVelaDispatchFastPath,
+  shouldIncludePinnedOnFastPath,
+  emptyVectorSearchResult,
+} = require("./velaDispatchFastPath");
+const {
   grepCommand,
   VALID_COMMANDS,
   chatPrompt,
@@ -86,8 +91,13 @@ async function streamChatWithWorkspace(
   const VectorDb = getVectorDbClass();
 
   const messageLimit = workspace?.openAiHistory || 20;
-  const hasVectorizedSpace = await VectorDb.hasNamespace(workspace.slug);
-  const embeddingsCount = await VectorDb.namespaceCount(workspace.slug);
+  const fastPath = isVelaDispatchFastPath(workspace, chatMode);
+  let hasVectorizedSpace = false;
+  let embeddingsCount = 0;
+  if (!fastPath) {
+    hasVectorizedSpace = await VectorDb.hasNamespace(workspace.slug);
+    embeddingsCount = await VectorDb.namespaceCount(workspace.slug);
+  }
 
   // User is trying to query-mode chat a workspace that has no data in it - so
   // we should exit early as no information can be found under these conditions.
@@ -139,43 +149,50 @@ async function streamChatWithWorkspace(
   (await recentChatHistory({ user, workspace, thread, messageLimit }));
 
   // Pinned docs — reuse pre-fetched if available, otherwise fetch with token cap.
+  const includePinned = !fastPath || shouldIncludePinnedOnFastPath(attachments);
   const pinnedDocs =
-    prefetchedPinnedDocs ??
-    (await new DocumentManager({
-      workspace,
-      maxTokens: LLMConnector.promptWindowLimit(),
-    }).pinnedDocs());
-  pinnedDocs.forEach((doc) => {
-    const { pageContent, ...metadata } = doc;
-    pinnedDocIdentifiers.push(sourceIdentifier(doc));
-    contextTexts.push(doc.pageContent);
-    sources.push({
-      text:
-        pageContent.slice(0, 1_000) + "...continued on in source document...",
-      ...metadata,
+    includePinned &&
+    (prefetchedPinnedDocs ??
+      (await new DocumentManager({
+        workspace,
+        maxTokens: LLMConnector.promptWindowLimit(),
+      }).pinnedDocs()));
+  if (pinnedDocs) {
+    pinnedDocs.forEach((doc) => {
+      const { pageContent, ...metadata } = doc;
+      pinnedDocIdentifiers.push(sourceIdentifier(doc));
+      contextTexts.push(doc.pageContent);
+      sources.push({
+        text:
+          pageContent.slice(0, 1_000) + "...continued on in source document...",
+        ...metadata,
+      });
     });
-  });
+  }
 
   // Parsed files — reuse pre-fetched if available, otherwise fetch fresh.
   const parsedFiles =
-    prefetchedParsedFiles ??
-    (await WorkspaceParsedFiles.getContextFiles(
-      workspace,
-      thread || null,
-      user || null
-    ));
-  parsedFiles.forEach((doc) => {
-    const { pageContent, ...metadata } = doc;
-    contextTexts.push(doc.pageContent);
-    sources.push({
-      text:
-        pageContent.slice(0, 1_000) + "...continued on in source document...",
-      ...metadata,
+    includePinned &&
+    (prefetchedParsedFiles ??
+      (await WorkspaceParsedFiles.getContextFiles(
+        workspace,
+        thread || null,
+        user || null
+      )));
+  if (parsedFiles) {
+    parsedFiles.forEach((doc) => {
+      const { pageContent, ...metadata } = doc;
+      contextTexts.push(doc.pageContent);
+      sources.push({
+        text:
+          pageContent.slice(0, 1_000) + "...continued on in source document...",
+        ...metadata,
+      });
     });
-  });
+  }
 
   const vectorSearchResults =
-    embeddingsCount !== 0
+    !fastPath && embeddingsCount !== 0
       ? await VectorDb.performSimilaritySearch({
           namespace: workspace.slug,
           input: updatedMessage,
@@ -185,11 +202,7 @@ async function streamChatWithWorkspace(
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: workspace?.vectorSearchMode === "rerank",
         })
-      : {
-          contextTexts: [],
-          sources: [],
-          message: null,
-        };
+      : emptyVectorSearchResult();
 
   // Failed similarity search if it was run at all and failed.
   if (!!vectorSearchResults.message) {

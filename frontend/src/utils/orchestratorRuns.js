@@ -47,6 +47,10 @@ export function orchestratorChatDraftKey(workspaceSlug, threadSlug) {
 /** Persist in-flight orchestrator chat (survives thread navigation before writeback). */
 export function saveOrchestratorChatDraft(workspaceSlug, threadSlug, history) {
   if (!workspaceSlug || !Array.isArray(history)) return;
+  if (history.length === 0) {
+    const existing = loadOrchestratorChatDraft(workspaceSlug, threadSlug);
+    if (Array.isArray(existing) && existing.length > 0) return;
+  }
   try {
     sessionStorage.setItem(
       orchestratorChatDraftKey(workspaceSlug, threadSlug),

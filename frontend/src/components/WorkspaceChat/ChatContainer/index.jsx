@@ -74,12 +74,23 @@ export default function ChatContainer({
     setActiveWorkspace(workspace);
   }, [workspace]);
   const [loadingResponse, setLoadingResponse] = useState(false);
-  const [chatHistory, setChatHistory] = useState(knownHistory);
+  const [chatHistory, setChatHistory] = useState(() => {
+    if (knownHistory?.length > 0) return knownHistory;
+    if (embedded && workspace?.velaProjectId && workspace?.slug) {
+      const draft = loadOrchestratorChatDraft(workspace.slug, threadSlug);
+      if (Array.isArray(draft) && draft.length > 0) return draft;
+    }
+    return knownHistory ?? [];
+  });
+  const embeddedHistoryLoadedRef = useRef(!embedded);
   const orchestratorMode = !!workspace?.velaProjectId;
 
   useEffect(() => {
     setChatHistory(knownHistory);
-  }, [knownHistory]);
+    if (embedded && knownHistory?.length > 0) {
+      embeddedHistoryLoadedRef.current = true;
+    }
+  }, [knownHistory, embedded]);
 
   useEffect(() => {
     if (!embedded || !workspace?.slug) return;
@@ -93,7 +104,12 @@ export default function ChatContainer({
         ? await Workspace.threads.chatHistory(workspace.slug, threadSlug)
         : await Workspace.chatHistory(workspace.slug);
       if (cancelled) return;
-      setChatHistory(mergeOrchestratorChatHistory(serverHistory, draft));
+      const merged = mergeOrchestratorChatHistory(serverHistory, draft);
+      setChatHistory((prev) => {
+        if (prev.length > merged.length) return prev;
+        return merged.length > 0 ? merged : prev;
+      });
+      embeddedHistoryLoadedRef.current = true;
     })();
     return () => {
       cancelled = true;
@@ -102,8 +118,11 @@ export default function ChatContainer({
 
   useEffect(() => {
     if (!orchestratorMode || !workspace?.slug) return;
+    if (embedded && !embeddedHistoryLoadedRef.current && chatHistory.length === 0) {
+      return;
+    }
     saveOrchestratorChatDraft(workspace.slug, threadSlug, chatHistory);
-  }, [chatHistory, orchestratorMode, workspace?.slug, threadSlug]);
+  }, [chatHistory, orchestratorMode, workspace?.slug, threadSlug, embedded]);
 
   useEffect(() => {
     if (!orchestratorMode || !workspace?.slug) return;
@@ -811,6 +830,7 @@ export default function ChatContainer({
                     regenerateAssistantMessage={regenerateAssistantMessage}
                     websocket={websocket}
                     threadSlug={threadSlug}
+                    embedded={embedded}
                     orchestratorRuns={runsByParentId}
                     onOrchestratorResume={async (run, answer) => {
                       setLoadingResponse(true);

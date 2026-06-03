@@ -661,6 +661,7 @@ async function resolveProviderConnector({
       connector: new VelaLLMConnector({
         workspace,
         modelPreference: workspace?.chatModel,
+        userId: user?.id ? String(user.id) : null,
       }),
       routingMetadata: null,
       prefetchedContext: null,

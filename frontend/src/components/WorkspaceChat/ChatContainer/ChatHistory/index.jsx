@@ -46,12 +46,15 @@ export default forwardRef(function (
     orchestratorRuns = {},
     onOrchestratorResume = null,
     resumingRunId = null,
+    threadSlug: threadSlugProp = null,
+    embedded = false,
   },
   ref
 ) {
   const lastScrollTopRef = useRef(0);
   const chatHistoryRef = useRef(null);
-  const { threadSlug = null } = useParams();
+  const { threadSlug: routeThreadSlug = null } = useParams();
+  const threadSlug = threadSlugProp ?? routeThreadSlug;
   const { showing, hideModal } = useManageWorkspaceModal();
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
@@ -234,7 +237,7 @@ export default forwardRef(function (
     <MessageActionsProvider>
       <ThoughtExpansionProvider>
         <div
-          className={`markdown text-white/80 light:text-theme-text-primary font-light ${textSizeClass} h-full md:h-[83%] pb-[100px] pt-6 md:pt-0 md:pb-20 md:mx-0 overflow-y-scroll flex flex-col items-center justify-start ${showScrollbar ? "show-scrollbar" : "no-scroll"}`}
+          className={`markdown text-white/80 light:text-theme-text-primary font-light ${textSizeClass} ${embedded ? "h-full min-h-0" : "h-full md:h-[83%]"} pb-[100px] pt-6 md:pt-0 md:pb-20 md:mx-0 overflow-y-scroll flex flex-col items-center justify-start ${showScrollbar ? "show-scrollbar" : "no-scroll"}`}
           id="chat-history"
           ref={chatHistoryRef}
           onScroll={handleScroll}
