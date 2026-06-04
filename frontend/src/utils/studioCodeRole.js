@@ -1,6 +1,8 @@
 /** Studio Code workspace — Hub role picker (M49.5). */
 
+import Workspace from "@/models/workspace";
 import paths from "@/utils/paths";
+import { saveSplitThreadSlugs } from "@/utils/studioCodeSplit";
 
 export const DEFAULT_STUDIO_CODE_ROLE_ID = "code-maintainer";
 
@@ -48,6 +50,33 @@ export function pickDefaultRoleId(roles, serverDefaultId) {
   if (serverDefaultId && ids.has(serverDefaultId)) return serverDefaultId;
   if (ids.has(DEFAULT_STUDIO_CODE_ROLE_ID)) return DEFAULT_STUDIO_CODE_ROLE_ID;
   return roles?.[0]?.id || DEFAULT_STUDIO_CODE_ROLE_ID;
+}
+
+/**
+ * Create a fresh agent thread and navigate to it (replaces the active route thread).
+ */
+export async function activateNewStudioCodeAgent({
+  workspaceSlug,
+  replaceThreadSlug = null,
+  splitSlugs = [],
+}) {
+  const { thread, error } = await Workspace.threads.new(workspaceSlug);
+  if (!thread?.slug) {
+    throw new Error(error || "Could not create a new agent.");
+  }
+  if (
+    replaceThreadSlug &&
+    Array.isArray(splitSlugs) &&
+    splitSlugs.includes(replaceThreadSlug)
+  ) {
+    saveSplitThreadSlugs(
+      workspaceSlug,
+      splitSlugs.map((slug) =>
+        slug === replaceThreadSlug ? thread.slug : slug
+      )
+    );
+  }
+  return thread;
 }
 
 export function resolveStoredRoleId(workspaceSlug, roles, serverDefaultId) {

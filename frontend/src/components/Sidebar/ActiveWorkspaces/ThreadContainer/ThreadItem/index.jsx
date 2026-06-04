@@ -30,6 +30,7 @@ export default function ThreadItem({
   splitChecked = false,
   splitCheckboxDisabled = false,
   onSplitCheckboxChange = null,
+  contextFillBorderClass = "",
 }) {
   const { slug: urlSlug, threadSlug = null } = useParams();
   const [searchParams] = useSearchParams();
@@ -54,8 +55,13 @@ export default function ThreadItem({
   });
   return (
     <div
-      className="w-full relative flex h-[38px] items-center border-none rounded-lg"
+      className={`w-full relative flex h-[38px] items-center border-none rounded-lg ${contextFillBorderClass}`}
       role="listitem"
+      title={
+        contextFillBorderClass
+          ? "This agent is using a large share of its context window"
+          : undefined
+      }
     >
       {/* Curved line Element and leader if required */}
       <div
@@ -97,7 +103,7 @@ export default function ThreadItem({
             title={
               splitCheckboxDisabled
                 ? `Maximum ${MAX_STUDIO_CODE_SPLIT_PANES} sessions in split view`
-                : "Show in split view"
+                : "Show agent in split view"
             }
             aria-label={`Show ${thread.name} in split view`}
             onChange={(e) => onSplitCheckboxChange?.(e.target.checked)}

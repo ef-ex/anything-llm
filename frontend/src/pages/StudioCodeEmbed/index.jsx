@@ -10,7 +10,11 @@ import StudioCodeSplitLayout from "@/pages/StudioCodeEmbed/StudioCodeSplitLayout
 import { TTSProvider } from "@/components/contexts/TTSProvider";
 import { DnDFileUploaderProvider } from "@/components/WorkspaceChat/ChatContainer/DnDWrapper";
 import { OrchestratorChatProvider } from "@/contexts/OrchestratorChatContext";
-import { studioCodeThreadPath } from "@/utils/studioCodeRole";
+import { StudioCodeContextProvider } from "@/contexts/StudioCodeContext";
+import {
+  activateNewStudioCodeAgent,
+  studioCodeThreadPath,
+} from "@/utils/studioCodeRole";
 import { isWorkerThreadSlug } from "@/utils/orchestratorRuns";
 import {
   loadSplitThreadSlugs,
@@ -19,7 +23,7 @@ import {
 } from "@/utils/studioCodeSplit";
 
 /**
- * Studio Code tab shell — AnythingLLM chat with session thread list (M49.5).
+ * Studio Code tab shell — AnythingLLM chat with agent list (M49.5).
  */
 export default function StudioCodeEmbed() {
   const { loading, requiresAuth, mode } = usePasswordModal();
@@ -32,13 +36,16 @@ export default function StudioCodeEmbed() {
   return <StudioCodeEmbedChat />;
 }
 
-function SessionsSidebar({ workspace, splitThreadSlugs, onSplitToggle }) {
+function AgentsSidebar({ workspace, splitThreadSlugs, onSplitToggle }) {
   return (
     <>
-      <div className="md:hidden shrink-0 border-b border-white/10 light:border-slate-200 bg-theme-bg-sidebar max-h-[28vh] overflow-y-auto">
+      <aside
+        className="md:hidden shrink-0 border-b border-white/10 light:border-slate-200 bg-theme-bg-sidebar max-h-[28vh] overflow-y-auto"
+        aria-label="Code agents"
+      >
         <div className="px-3 py-2 border-b border-white/10 light:border-slate-200">
           <p className="text-xs font-semibold text-white light:text-slate-800">
-            Sessions
+            Agents
           </p>
         </div>
         <div className="px-1 py-1">
@@ -48,17 +55,17 @@ function SessionsSidebar({ workspace, splitThreadSlugs, onSplitToggle }) {
             onSplitToggle={onSplitToggle}
           />
         </div>
-      </div>
+      </aside>
       <aside
         className="hidden md:flex flex-col w-[260px] shrink-0 border-r border-white/10 light:border-slate-200 bg-theme-bg-sidebar h-full overflow-y-auto"
-        aria-label="Code chat sessions"
+        aria-label="Code agents"
       >
         <div className="px-3 py-3 border-b border-white/10 light:border-slate-200">
           <p className="text-xs font-semibold text-white light:text-slate-800">
-            Sessions
+            Agents
           </p>
           <p className="text-[11px] text-zinc-400 light:text-slate-500 mt-0.5">
-            Check threads to open them side by side in split view.
+            Each agent is its own chat. Check agents to compare side by side.
           </p>
         </div>
         <div className="flex-1 px-1 py-2">
@@ -139,6 +146,27 @@ function StudioCodeEmbedChat() {
     [workspace?.slug, splitSlugs]
   );
 
+  const handleNewAgent = useCallback(async () => {
+    if (!workspace?.slug) return;
+    const replaceSlug = activeInputSlug || threadSlug;
+    const thread = await activateNewStudioCodeAgent({
+      workspaceSlug: workspace.slug,
+      replaceThreadSlug: replaceSlug,
+      splitSlugs,
+    });
+    setSplitSlugs(loadSplitThreadSlugs(workspace.slug));
+    setActiveInputSlug(thread.slug);
+    navigate(studioCodeThreadPath(workspace.slug, thread.slug), {
+      replace: true,
+    });
+  }, [
+    workspace?.slug,
+    activeInputSlug,
+    threadSlug,
+    splitSlugs,
+    navigate,
+  ]);
+
   useEffect(() => {
     async function ensureThreadRoute() {
       if (!workspace?.slug || threadSlug || ensuringThreadRef.current) return;
@@ -162,7 +190,7 @@ function StudioCodeEmbedChat() {
           });
           return;
         }
-        console.warn("[vela] could not create initial code thread:", error);
+        console.warn("[vela] could not create initial code agent:", error);
       } finally {
         ensuringThreadRef.current = false;
       }
@@ -190,37 +218,39 @@ function StudioCodeEmbedChat() {
   const orchestratorThreadSlug = activeInputSlug || threadSlug;
 
   return (
-    <div className="w-screen h-[100dvh] overflow-hidden bg-zinc-950 light:bg-slate-50 flex flex-col md:flex-row">
-      <SessionsSidebar
-        workspace={workspace}
-        splitThreadSlugs={splitSlugs}
-        onSplitToggle={handleSplitToggle}
-      />
-      <main className="flex-1 min-w-0 h-full">
-        {useSplitGrid ? (
-          <TTSProvider>
-            <DnDFileUploaderProvider
-              workspace={workspace}
-              threadSlug={orchestratorThreadSlug}
-            >
-              <OrchestratorChatProvider
+    <StudioCodeContextProvider workspace={workspace} onNewAgent={handleNewAgent}>
+      <div className="w-screen h-[100dvh] overflow-hidden bg-zinc-950 light:bg-slate-50 flex flex-col md:flex-row">
+        <AgentsSidebar
+          workspace={workspace}
+          splitThreadSlugs={splitSlugs}
+          onSplitToggle={handleSplitToggle}
+        />
+        <main className="flex-1 min-w-0 h-full">
+          {useSplitGrid ? (
+            <TTSProvider>
+              <DnDFileUploaderProvider
                 workspace={workspace}
                 threadSlug={orchestratorThreadSlug}
               >
-                <StudioCodeSplitLayout
+                <OrchestratorChatProvider
                   workspace={workspace}
-                  paneThreadSlugs={panes}
-                  activeInputThreadSlug={activeInputSlug || panes[0]}
-                  onActivatePane={setActiveInputSlug}
-                  overflowCount={overflowCount}
-                />
-              </OrchestratorChatProvider>
-            </DnDFileUploaderProvider>
-          </TTSProvider>
-        ) : (
-          <WorkspaceChatContainer loading={false} workspace={workspace} embedded />
-        )}
-      </main>
-    </div>
+                  threadSlug={orchestratorThreadSlug}
+                >
+                  <StudioCodeSplitLayout
+                    workspace={workspace}
+                    paneThreadSlugs={panes}
+                    activeInputThreadSlug={activeInputSlug || panes[0]}
+                    onActivatePane={setActiveInputSlug}
+                    overflowCount={overflowCount}
+                  />
+                </OrchestratorChatProvider>
+              </DnDFileUploaderProvider>
+            </TTSProvider>
+          ) : (
+            <WorkspaceChatContainer loading={false} workspace={workspace} embedded />
+          )}
+        </main>
+      </div>
+    </StudioCodeContextProvider>
   );
 }

@@ -13,6 +13,11 @@ import {
 } from "@/utils/orchestratorRuns";
 import { isStudioCodeEmbed, studioCodeThreadPath } from "@/utils/studioCodeRole";
 import { MAX_STUDIO_CODE_SPLIT_PANES } from "@/utils/studioCodeSplit";
+import {
+  useStudioCodeContext,
+  useStudioCodeContextRefreshListener,
+} from "@/contexts/StudioCodeContext";
+import { contextFillBorderClass } from "@/utils/studioCodeContext";
 export const THREAD_RENAME_EVENT = "renameThread";
 
 export default function ThreadContainer({
@@ -23,6 +28,7 @@ export default function ThreadContainer({
   const { threadSlug = null } = useParams();
   const [searchParams] = useSearchParams();
   const studioCode = isStudioCodeEmbed(searchParams);
+  const studioCtx = useStudioCodeContext();
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ctrlPressed, setCtrlPressed] = useState(false);
@@ -67,6 +73,15 @@ export default function ThreadContainer({
   useEffect(() => {
     fetchThreads();
   }, [fetchThreads]);
+
+  useEffect(() => {
+    if (!studioCode || !studioCtx?.enabled) return;
+    studioCtx.refreshThreads(threads.map((t) => t.slug));
+  }, [studioCode, studioCtx, threads]);
+
+  useStudioCodeContextRefreshListener(workspace, (threadSlug) => {
+    if (threadSlug) studioCtx?.refreshThread(threadSlug);
+  });
 
   useEffect(() => {
     const onWorkerThread = (event) => {
@@ -176,10 +191,10 @@ export default function ThreadContainer({
   const splitAtCap = splitSet.size >= MAX_STUDIO_CODE_SPLIT_PANES;
 
   return (
-    <div className="flex flex-col" role="list" aria-label="Threads">
+    <div className="flex flex-col" role="list" aria-label={studioCode ? "Agents" : "Threads"}>
       {studioCode && onSplitToggle && (
         <p className="text-[10px] text-zinc-400 light:text-slate-500 px-3 pb-2 leading-snug">
-          Check sessions to show side by side (up to {MAX_STUDIO_CODE_SPLIT_PANES}).
+          Check agents to show side by side (up to {MAX_STUDIO_CODE_SPLIT_PANES}).
         </p>
       )}
       {threads.map((thread, i) => (
@@ -204,6 +219,11 @@ export default function ThreadContainer({
           }
           onSplitCheckboxChange={(checked) =>
             onSplitToggle?.(thread.slug, checked)
+          }
+          contextFillBorderClass={
+            studioCode && studioCtx?.enabled
+              ? contextFillBorderClass(studioCtx.getFill(thread.slug).level)
+              : ""
           }
         />
       ))}
@@ -258,11 +278,11 @@ function NewThreadButton({ workspace, studioCode = false }) {
 
         {loading ? (
           <p className="text-left text-white light:text-theme-text-primary text-sm">
-            Starting Thread...
+            {studioCode ? "Starting agent…" : "Starting Thread..."}
           </p>
         ) : (
           <p className="text-left text-white light:text-theme-text-primary text-sm font-semibold">
-            New Thread
+            {studioCode ? "New Agent" : "New Thread"}
           </p>
         )}
       </div>

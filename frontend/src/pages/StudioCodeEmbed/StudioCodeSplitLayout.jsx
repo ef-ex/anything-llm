@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { isMobile } from "react-device-detect";
 import ChatContainer from "@/components/WorkspaceChat/ChatContainer";
 import Workspace from "@/models/workspace";
+import { useStudioCodeContext } from "@/contexts/StudioCodeContext";
+import { contextFillBorderClass } from "@/utils/studioCodeContext";
 import { MAX_STUDIO_CODE_SPLIT_PANES, studioCodeSplitGridStyle } from "@/utils/studioCodeSplit";
 
 /**
@@ -15,6 +17,7 @@ export default function StudioCodeSplitLayout({
   onActivatePane = null,
   overflowCount = 0,
 }) {
+  const studioCtx = useStudioCodeContext();
   const [historiesBySlug, setHistoriesBySlug] = useState({});
   const [threadNames, setThreadNames] = useState({});
 
@@ -49,6 +52,12 @@ export default function StudioCodeSplitLayout({
     };
   }, [workspace?.slug, paneThreadSlugs.join("|")]);
 
+  useEffect(() => {
+    if (studioCtx?.enabled) {
+      studioCtx.refreshThreads(paneThreadSlugs);
+    }
+  }, [studioCtx, paneThreadSlugs.join("|")]);
+
   const gridStyle = studioCodeSplitGridStyle(paneThreadSlugs.length, isMobile);
 
   return (
@@ -65,6 +74,10 @@ export default function StudioCodeSplitLayout({
         {paneThreadSlugs.map((threadSlug) => {
           const isActiveInput = threadSlug === activeInputThreadSlug;
           const label = threadNames[threadSlug] || threadSlug;
+          const contextBorder =
+            studioCtx?.enabled
+              ? contextFillBorderClass(studioCtx.getFill(threadSlug).level)
+              : "";
           return (
             <div
               key={threadSlug}
@@ -72,7 +85,7 @@ export default function StudioCodeSplitLayout({
                 isActiveInput
                   ? "border-primary-button ring-1 ring-primary-button/40"
                   : "border-white/10 light:border-slate-300"
-              }`}
+              } ${contextBorder}`}
               onMouseDown={() => onActivatePane?.(threadSlug)}
             >
               <div

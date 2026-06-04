@@ -20,6 +20,7 @@ import StudioCodeRoleSelect from "./StudioCodeRoleSelect";
 import { useSearchParams } from "react-router-dom";
 import { useIsAgentSessionActive } from "@/utils/chat/agent";
 import { isStudioCodeEmbed } from "@/utils/studioCodeRole";
+import { useStudioCodeContext } from "@/contexts/StudioCodeContext";
 
 export const PROMPT_INPUT_ID = "primary-prompt-input";
 export const PROMPT_INPUT_EVENT = "set_prompt_input";
@@ -61,7 +62,9 @@ export default function PromptInput({
   const { textSizeClass } = useTextSize();
   const [searchParams] = useSearchParams();
   const studioCode = isStudioCodeEmbed(searchParams);
+  const studioCtx = useStudioCodeContext();
   const effectiveWorkspaceSlug = workspaceSlug || workspace?.slug;
+  const [newAgentLoading, setNewAgentLoading] = useState(false);
 
   // Synchronizes prompt input value with localStorage, scoped to the current thread.
   usePromptInputStorage({
@@ -376,6 +379,26 @@ export default function PromptInput({
                       workspaceSlug={effectiveWorkspaceSlug}
                       projectId={workspace?.velaProjectId}
                     />
+                    {studioCode && studioCtx?.onNewAgent && (
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-zinc-300 light:text-slate-600 hover:text-white light:hover:text-slate-900 border border-white/15 light:border-slate-300 rounded-lg px-2 py-1 shrink-0 disabled:opacity-50"
+                        title="Start a fresh agent and discard the current conversation context"
+                        disabled={newAgentLoading || isStreaming}
+                        onClick={async () => {
+                          setNewAgentLoading(true);
+                          try {
+                            await studioCtx.onNewAgent();
+                          } catch (err) {
+                            console.warn("[vela] new agent", err);
+                          } finally {
+                            setNewAgentLoading(false);
+                          }
+                        }}
+                      >
+                        {newAgentLoading ? "…" : "New Agent"}
+                      </button>
+                    )}
                     <AttachItem
                       workspaceSlug={workspaceSlug}
                       workspaceThreadSlug={threadSlug}

@@ -59,6 +59,8 @@ import {
   loadStudioCodeRole,
   useOrchestratorChatForWorkspace,
 } from "@/utils/studioCodeRole";
+import { useStudioCodeContext, emitStudioCodeContextRefresh } from "@/contexts/StudioCodeContext";
+import { contextFillBorderClass } from "@/utils/studioCodeContext";
 
 export default function ChatContainer({
   workspace,
@@ -76,6 +78,7 @@ export default function ChatContainer({
   const [searchParams] = useSearchParams();
   const studioCodeEmbed = isStudioCodeEmbed(searchParams);
   const orchestratorUx = useOrchestratorChatForWorkspace(searchParams, workspace);
+  const studioCtx = useStudioCodeContext();
   const { t } = useTranslation();
   const [activeWorkspace, setActiveWorkspace] = useState(workspace);
   useEffect(() => {
@@ -205,6 +208,27 @@ export default function ChatContainer({
       );
     });
   }, [runsByParentId, orchestratorUx]);
+
+  useEffect(() => {
+    if (!studioCodeEmbed || !workspace?.slug || !threadSlug) return;
+    studioCtx?.refreshThread(threadSlug);
+  }, [
+    studioCodeEmbed,
+    workspace?.slug,
+    threadSlug,
+    chatHistory,
+    studioCtx,
+  ]);
+
+  useEffect(() => {
+    if (!studioCodeEmbed || !workspace?.slug || !threadSlug) return;
+    emitStudioCodeContextRefresh(workspace.slug, threadSlug);
+  }, [studioCodeEmbed, workspace?.slug, threadSlug, chatHistory]);
+
+  const contextPaneBorder =
+    studioCodeEmbed && threadSlug && studioCtx?.enabled
+      ? contextFillBorderClass(studioCtx.getFill(threadSlug).level)
+      : "";
 
   const isEmpty =
     chatHistory.length === 0 && !sessionStorage.getItem(PENDING_HOME_MESSAGE);
@@ -755,8 +779,8 @@ export default function ChatContainer({
     ? "relative flex w-full h-full z-[1]"
     : "relative flex md:ml-[2px] md:mr-[16px] md:my-[16px] w-full h-full z-[2]";
   const innerClass = embedded
-    ? "flex-1 min-w-0 relative w-full h-full overflow-hidden bg-zinc-900 light:bg-white"
-    : "flex-1 min-w-0 transition-all duration-500 relative md:rounded-[16px] bg-zinc-900 light:bg-white w-full h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border";
+    ? `flex-1 min-w-0 relative w-full h-full overflow-hidden bg-zinc-900 light:bg-white ${contextPaneBorder}`
+    : `flex-1 min-w-0 transition-all duration-500 relative md:rounded-[16px] bg-zinc-900 light:bg-white w-full h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border ${contextPaneBorder}`;
   const heightStyle = embedded
     ? { height: "100%" }
     : { height: isMobile ? "100%" : "calc(100% - 32px)" };
@@ -793,25 +817,31 @@ export default function ChatContainer({
                       centered={true}
                     />
                   )}
-                  <QuickActions
-                    hasAvailableWorkspace={!!workspace}
-                    onCreateAgent={() => navigate(paths.settings.agentSkills())}
-                    onEditWorkspace={() =>
-                      navigate(
-                        paths.workspace.settings.generalAppearance(
-                          workspace.slug
+                  {!studioCodeEmbed && (
+                    <QuickActions
+                      hasAvailableWorkspace={!!workspace}
+                      onCreateAgent={() =>
+                        navigate(paths.settings.agentSkills())
+                      }
+                      onEditWorkspace={() =>
+                        navigate(
+                          paths.workspace.settings.generalAppearance(
+                            workspace.slug
+                          )
                         )
-                      )
-                    }
-                    onUploadDocument={() =>
-                      document.getElementById("dnd-chat-file-uploader")?.click()
-                    }
-                  />
+                      }
+                      onUploadDocument={() =>
+                        document.getElementById("dnd-chat-file-uploader")?.click()
+                      }
+                    />
+                  )}
                 </div>
-                <SuggestedMessages
-                  suggestedMessages={workspace?.suggestedMessages}
-                  sendCommand={sendCommand}
-                />
+                {!studioCodeEmbed && (
+                  <SuggestedMessages
+                    suggestedMessages={workspace?.suggestedMessages}
+                    sendCommand={sendCommand}
+                  />
+                )}
               </div>
             </DnDFileUploaderWrapper>
             <ChatTooltips />
