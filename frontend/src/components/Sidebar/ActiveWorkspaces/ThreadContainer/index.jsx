@@ -12,9 +12,14 @@ import {
   VELA_WORKER_THREAD_EVENT,
 } from "@/utils/orchestratorRuns";
 import { isStudioCodeEmbed, studioCodeThreadPath } from "@/utils/studioCodeRole";
+import { MAX_STUDIO_CODE_SPLIT_PANES } from "@/utils/studioCodeSplit";
 export const THREAD_RENAME_EVENT = "renameThread";
 
-export default function ThreadContainer({ workspace }) {
+export default function ThreadContainer({
+  workspace,
+  splitThreadSlugs = null,
+  onSplitToggle = null,
+}) {
   const { threadSlug = null } = useParams();
   const [searchParams] = useSearchParams();
   const studioCode = isStudioCodeEmbed(searchParams);
@@ -167,9 +172,16 @@ export default function ThreadContainer({ workspace }) {
   }
 
   const activeThreadIdx = getActiveThreadIdx();
+  const splitSet = new Set(splitThreadSlugs || []);
+  const splitAtCap = splitSet.size >= MAX_STUDIO_CODE_SPLIT_PANES;
 
   return (
     <div className="flex flex-col" role="list" aria-label="Threads">
+      {studioCode && onSplitToggle && (
+        <p className="text-[10px] text-zinc-400 light:text-slate-500 px-3 pb-2 leading-snug">
+          Check sessions to show side by side (up to {MAX_STUDIO_CODE_SPLIT_PANES}).
+        </p>
+      )}
       {threads.map((thread, i) => (
         <ThreadItem
           key={thread.slug}
@@ -185,6 +197,14 @@ export default function ThreadContainer({ workspace }) {
             !studioCode && isWorkerThreadSlug(workspace.slug, thread.slug)
           }
           hasNext={i !== threads.length - 1}
+          showSplitCheckbox={studioCode && !!onSplitToggle}
+          splitChecked={splitSet.has(thread.slug)}
+          splitCheckboxDisabled={
+            splitAtCap && !splitSet.has(thread.slug)
+          }
+          onSplitCheckboxChange={(checked) =>
+            onSplitToggle?.(thread.slug, checked)
+          }
         />
       ))}
       <DeleteAllThreadButton

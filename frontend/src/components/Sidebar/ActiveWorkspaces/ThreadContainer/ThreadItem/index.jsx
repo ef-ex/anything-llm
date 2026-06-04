@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { isStudioCodeEmbed, studioCodeThreadPath } from "@/utils/studioCodeRole";
+import { MAX_STUDIO_CODE_SPLIT_PANES } from "@/utils/studioCodeSplit";
 
 const THREAD_CALLOUT_DETAIL_WIDTH = 26;
 export default function ThreadItem({
@@ -25,6 +26,10 @@ export default function ThreadItem({
   hasNext,
   ctrlPressed = false,
   isWorkerChild = false,
+  showSplitCheckbox = false,
+  splitChecked = false,
+  splitCheckboxDisabled = false,
+  onSplitCheckboxChange = null,
 }) {
   const { slug: urlSlug, threadSlug = null } = useParams();
   const [searchParams] = useSearchParams();
@@ -83,6 +88,22 @@ export default function ThreadItem({
       <div
         className={`flex w-full items-center justify-between pr-2 group/thread relative ${isActive ? "bg-[var(--theme-sidebar-thread-selected)] light:bg-blue-200" : "hover:bg-theme-sidebar-subitem-hover light:hover:bg-slate-300"} rounded-[4px]`}
       >
+        {showSplitCheckbox && !!thread.slug && !thread.deleted && (
+          <input
+            type="checkbox"
+            className="ml-2 shrink-0 cursor-pointer"
+            checked={splitChecked}
+            disabled={splitCheckboxDisabled}
+            title={
+              splitCheckboxDisabled
+                ? `Maximum ${MAX_STUDIO_CODE_SPLIT_PANES} sessions in split view`
+                : "Show in split view"
+            }
+            aria-label={`Show ${thread.name} in split view`}
+            onChange={(e) => onSplitCheckboxChange?.(e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
         {thread.deleted ? (
           <div className="w-full flex justify-between">
             <div className="w-full pl-2 py-1">
