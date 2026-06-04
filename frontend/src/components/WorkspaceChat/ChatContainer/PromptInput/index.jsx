@@ -16,8 +16,10 @@ import { useTranslation } from "react-i18next";
 import Appearance from "@/models/appearance";
 import usePromptInputStorage from "@/hooks/usePromptInputStorage";
 import ToolsMenu, { TOOLS_MENU_KEYBOARD_EVENT } from "./ToolsMenu";
+import StudioCodeRoleSelect from "./StudioCodeRoleSelect";
 import { useSearchParams } from "react-router-dom";
 import { useIsAgentSessionActive } from "@/utils/chat/agent";
+import { isStudioCodeEmbed } from "@/utils/studioCodeRole";
 
 export const PROMPT_INPUT_ID = "primary-prompt-input";
 export const PROMPT_INPUT_EVENT = "set_prompt_input";
@@ -58,6 +60,8 @@ export default function PromptInput({
   const redoStack = useRef([]);
   const { textSizeClass } = useTextSize();
   const [searchParams] = useSearchParams();
+  const studioCode = isStudioCodeEmbed(searchParams);
+  const effectiveWorkspaceSlug = workspaceSlug || workspace?.slug;
 
   // Synchronizes prompt input value with localStorage, scoped to the current thread.
   usePromptInputStorage({
@@ -368,6 +372,10 @@ export default function PromptInput({
               <div className="flex justify-between items-center pt-3.5 pb-3">
                 <div className="flex items-center gap-x-0.25">
                   <div className="flex items-center gap-x-1">
+                    <StudioCodeRoleSelect
+                      workspaceSlug={effectiveWorkspaceSlug}
+                      projectId={workspace?.velaProjectId}
+                    />
                     <AttachItem
                       workspaceSlug={workspaceSlug}
                       workspaceThreadSlug={threadSlug}
@@ -376,7 +384,7 @@ export default function PromptInput({
                       sendCommand={sendCommand}
                       promptInput={promptInput}
                       textareaRef={textareaRef}
-                      visible={!agentSessionActive & showAgentCommand}
+                      visible={!studioCode && !agentSessionActive && showAgentCommand}
                     />
                   </div>
                   <ToolsButton

@@ -17,8 +17,114 @@ const {
   velaUserId,
 } = require("../utils/velaApi");
 
+function studioCodeWorkspaceName(projectName, projectId) {
+  const label = (projectName || "Project").trim().slice(0, 120);
+  return `Code — ${label || projectId}`;
+}
+
+function isVelaChatInternalRequest(request) {
+  const expected = process.env.VELA_CHAT_INTERNAL_TOKEN;
+  if (!expected) return false;
+  const header = request.headers["x-vela-chat-token"];
+  return typeof header === "string" && header === expected;
+}
+
 function velaEndpoints(app) {
   if (!app) return;
+
+  app.post(
+    "/vela/studio/ensure-code-workspace",
+    async (request, response) => {
+      if (!isVelaChatInternalRequest(request)) {
+        return response.status(403).json({ error: "Forbidden" });
+      }
+      try {
+        const body = reqBody(request);
+        const projectId = body.project_id;
+        const projectName = body.project_name;
+        const hubUserId = body.user_id;
+        if (!projectId || typeof projectId !== "string") {
+          return response.status(400).json({ error: "project_id is required" });
+        }
+
+        let workspace = await Workspace.getByVelaProjectId(projectId);
+        if (workspace) {
+          const { workspace: updated, message } = await Workspace.update(workspace.id, {
+            chatProvider: "vela-dispatch",
+            velaRolePresetId: "code-maintainer",
+          });
+          workspace = updated || workspace;
+          if (!workspace) {
+            return response.status(500).json({
+              error: message || "Failed to update code workspace.",
+            });
+          }
+          return response.status(200).json({
+            slug: workspace.slug,
+            workspace_id: workspace.id,
+            created: false,
+          });
+        }
+
+        const { workspace: created, message } = await Workspace.new(
+          studioCodeWorkspaceName(projectName, projectId),
+          null,
+          {
+            velaProjectId: projectId,
+            velaRolePresetId: "code-maintainer",
+            chatProvider: "vela-dispatch",
+          }
+        );
+        if (!created) {
+          return response.status(500).json({
+            error: message || "Failed to create code workspace.",
+          });
+        }
+
+        const grantResult = await velaApiRequest(
+          `projects/${projectId}/grant-access`,
+          {
+            method: "POST",
+            query: { user_id: hubUserId || "admin-user" },
+          }
+        );
+        if (!grantResult.ok) {
+          console.warn(
+            `[vela] grant-access skipped for studio code workspace ${projectId}: ${grantResult.error}`
+          );
+        }
+
+        return response.status(201).json({
+          slug: created.slug,
+          workspace_id: created.id,
+          created: true,
+        });
+      } catch (e) {
+        console.error(e);
+        return response.status(500).json({ error: "Could not prepare code workspace." });
+      }
+    }
+  );
+
+  app.get(
+    "/workspace/:slug/vela/studio/code-roles",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      const user = await userFromSession(request, response);
+      const projectId = request.query.project_id || workspace.velaProjectId;
+      if (!projectId) {
+        return response.status(400).json({ error: "No Vela project bound to workspace" });
+      }
+      const result = await velaApiRequest("studio/code-roles", {
+        query: {
+          user_id: velaUserId(user),
+          project_id: projectId,
+        },
+      });
+      return sendVelaResult(response, result);
+    }
+  );
 
   app.get(
     "/vela/projects/linkable",

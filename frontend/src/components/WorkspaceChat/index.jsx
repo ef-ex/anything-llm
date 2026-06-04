@@ -26,7 +26,7 @@ import {
   saveChatLayoutMode,
 } from "@/utils/splitChatLayout";
 
-export default function WorkspaceChat({ loading, workspace }) {
+export default function WorkspaceChat({ loading, workspace, embedded = false }) {
   useWatchForAutoPlayAssistantTTSResponse();
   const { threadSlug = null } = useParams();
   const [layoutMode, setLayoutMode] = useState(CHAT_LAYOUT_SINGLE);
@@ -102,7 +102,7 @@ export default function WorkspaceChat({ loading, workspace }) {
     getHistory();
   }, [workspace, loading, threadSlug]);
 
-  const splitActive = velaBound && layoutMode === CHAT_LAYOUT_SPLIT;
+  const splitActive = velaBound && layoutMode === CHAT_LAYOUT_SPLIT && !embedded;
 
   const hasPendingMessage = !!sessionStorage.getItem(PENDING_HOME_MESSAGE);
   if (loaded === null) {
@@ -188,9 +188,11 @@ export default function WorkspaceChat({ loading, workspace }) {
               workspace={loaded.workspace}
               threadSlug={loaded.threadSlug}
               knownHistory={loaded.history}
+              embedded={embedded}
+              hideContextHeader={embedded}
               layoutMode={layoutMode}
               onLayoutModeChange={handleLayoutModeChange}
-              showLayoutToggle={velaBound}
+              showLayoutToggle={velaBound && !embedded}
             />
           )}
         </OrchestratorChatProvider>

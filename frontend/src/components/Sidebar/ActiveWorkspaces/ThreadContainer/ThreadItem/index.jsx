@@ -10,7 +10,8 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { isStudioCodeEmbed, studioCodeThreadPath } from "@/utils/studioCodeRole";
 
 const THREAD_CALLOUT_DETAIL_WIDTH = 26;
 export default function ThreadItem({
@@ -26,14 +27,20 @@ export default function ThreadItem({
   isWorkerChild = false,
 }) {
   const { slug: urlSlug, threadSlug = null } = useParams();
+  const [searchParams] = useSearchParams();
+  const studioCode = isStudioCodeEmbed(searchParams);
   const workspaceSlug = workspace?.slug ?? urlSlug;
   const optionsContainer = useRef(null);
   const [showOptions, setShowOptions] = useState(false);
   const linkTo = thread.virtual
     ? "/"
     : !thread.slug
-      ? paths.workspace.chat(workspaceSlug)
-      : paths.workspace.thread(workspaceSlug, thread.slug);
+      ? studioCode
+        ? studioCodeThreadPath(workspaceSlug)
+        : paths.workspace.chat(workspaceSlug)
+      : studioCode
+        ? studioCodeThreadPath(workspaceSlug, thread.slug)
+        : paths.workspace.thread(workspaceSlug, thread.slug);
 
   const { ref } = useScrollActiveItemIntoView({
     isActive,

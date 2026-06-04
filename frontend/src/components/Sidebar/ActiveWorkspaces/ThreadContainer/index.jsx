@@ -4,17 +4,20 @@ import showToast from "@/utils/toast";
 import { Plus, CircleNotch, Trash } from "@phosphor-icons/react";
 import { useEffect, useState, useCallback } from "react";
 import ThreadItem from "./ThreadItem";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import {
   isWorkerThreadSlug,
   repairWorkerThreadParentsAsync,
   sortThreadsWithWorkerChildren,
   VELA_WORKER_THREAD_EVENT,
 } from "@/utils/orchestratorRuns";
+import { isStudioCodeEmbed, studioCodeThreadPath } from "@/utils/studioCodeRole";
 export const THREAD_RENAME_EVENT = "renameThread";
 
 export default function ThreadContainer({ workspace }) {
   const { threadSlug = null } = useParams();
+  const [searchParams] = useSearchParams();
+  const studioCode = isStudioCodeEmbed(searchParams);
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ctrlPressed, setCtrlPressed] = useState(false);
@@ -44,8 +47,15 @@ export default function ThreadContainer({ workspace }) {
     await repairWorkerThreadParentsAsync(workspace.slug);
     const { threads } = await Workspace.threads.all(workspace.slug);
     setLoading(false);
-    setThreads(sortThreadsWithWorkerChildren(threads, workspace.slug));
-  }, [workspace.slug]);
+    const visible = studioCode
+      ? (threads || []).filter(
+          (t) => !isWorkerThreadSlug(workspace.slug, t.slug)
+        )
+      : threads;
+    setThreads(
+      studioCode ? visible : sortThreadsWithWorkerChildren(visible, workspace.slug)
+    );
+  }, [workspace.slug, studioCode]);
 
   useEffect(() => {
     fetchThreads();
@@ -111,7 +121,7 @@ export default function ThreadContainer({ workspace }) {
         (t) => !t.deleted && !slugs.includes(t.slug)
       );
       if (remaining.length > 0) {
-        window.location.href = paths.workspace.thread(
+        window.location.href = studioCodeThreadPath(
           workspace.slug,
           remaining[0].slug
         );
@@ -119,10 +129,7 @@ export default function ThreadContainer({ workspace }) {
       }
       const { thread, error } = await Workspace.threads.new(workspace.slug);
       if (thread) {
-        window.location.href = paths.workspace.thread(
-          workspace.slug,
-          thread.slug
-        );
+        window.location.href = studioCodeThreadPath(workspace.slug, thread.slug);
       } else {
         console.warn("[vela] thread recreate after delete failed:", error);
         window.location.href = paths.home();
@@ -172,7 +179,9 @@ export default function ThreadContainer({ workspace }) {
           workspace={workspace}
           onRemove={removeThread}
           thread={thread}
-          isWorkerChild={isWorkerThreadSlug(workspace.slug, thread.slug)}
+          isWorkerChild={
+            !studioCode && isWorkerThreadSlug(workspace.slug, thread.slug)
+          }
           hasNext={i !== threads.length - 1}
         />
       ))}
@@ -181,12 +190,12 @@ export default function ThreadContainer({ workspace }) {
         threads={threads}
         onDelete={handleDeleteAll}
       />
-      <NewThreadButton workspace={workspace} />
+      <NewThreadButton workspace={workspace} studioCode={studioCode} />
     </div>
   );
 }
 
-function NewThreadButton({ workspace }) {
+function NewThreadButton({ workspace, studioCode = false }) {
   const [loading, setLoading] = useState(false);
   const onClick = async () => {
     setLoading(true);
@@ -197,7 +206,9 @@ function NewThreadButton({ workspace }) {
       return;
     }
     window.location.replace(
-      paths.workspace.thread(workspace.slug, thread.slug)
+      studioCode
+        ? studioCodeThreadPath(workspace.slug, thread.slug)
+        : paths.workspace.thread(workspace.slug, thread.slug)
     );
   };
 

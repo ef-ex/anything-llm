@@ -55,6 +55,24 @@ const router = createBrowserRouter([
         children: [{ path: "t/:threadSlug" }],
       },
       {
+        path: "/studio/embed/:slug",
+        lazy: async () => {
+          const { default: StudioCodeEmbed } = await import(
+            "@/pages/StudioCodeEmbed"
+          );
+          return { element: <PrivateRoute Component={StudioCodeEmbed} /> };
+        },
+      },
+      {
+        path: "/studio/embed/:slug/t/:threadSlug",
+        lazy: async () => {
+          const { default: StudioCodeEmbed } = await import(
+            "@/pages/StudioCodeEmbed"
+          );
+          return { element: <PrivateRoute Component={StudioCodeEmbed} /> };
+        },
+      },
+      {
         path: "/accept-invite/:code",
         lazy: async () => {
           const { default: InvitePage } = await import("@/pages/Invite");

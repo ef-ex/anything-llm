@@ -9,7 +9,7 @@ import Workspace from "@/models/workspace";
 import handleChat, { ABORT_STREAM_EVENT } from "@/utils/chat";
 import { isMobile } from "react-device-detect";
 import { SidebarMobileHeader } from "../../Sidebar";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { v4 } from "uuid";
 import handleSocketResponse, {
   websocketURI,
@@ -54,6 +54,10 @@ import {
   ensureWorkerThread,
   VELA_ORCHESTRATOR_DRAFT_EVENT,
 } from "@/utils/orchestratorRuns";
+import {
+  isStudioCodeEmbed,
+  studioCodeDispatchParams,
+} from "@/utils/studioCodeRole";
 
 export default function ChatContainer({
   workspace,
@@ -68,6 +72,8 @@ export default function ChatContainer({
   showLayoutToggle = false,
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const studioCodeEmbed = isStudioCodeEmbed(searchParams);
   const { t } = useTranslation();
   const [activeWorkspace, setActiveWorkspace] = useState(workspace);
   useEffect(() => {
@@ -482,16 +488,24 @@ export default function ChatContainer({
             ? await resumeRun(openClarification, userText, {
                 parentMessageId: parentId,
               })
-            : await submitOrchestratorPrompt({
-                userText,
-                parentMessageId: parentId,
-                history: remHistory,
-                attachments,
-              });
+            : await (() => {
+                const dispatch = studioCodeEmbed
+                  ? studioCodeDispatchParams(workspace.slug)
+                  : { roleId: null, workflowId: null };
+                return submitOrchestratorPrompt({
+                  userText,
+                  parentMessageId: parentId,
+                  history: remHistory,
+                  attachments,
+                  roleId: dispatch.roleId,
+                  workflowId: dispatch.workflowId,
+                });
+              })();
           const assistantText = orchestratorMainThreadReply(finalRun);
           const routingReason =
             orchestratorRoutingReason(finalRun) || undefined;
           if (
+            !studioCodeEmbed &&
             finalRun?.role_id &&
             finalRun.role_id !== "orchestrator" &&
             isTerminalStatus(finalRun.status)

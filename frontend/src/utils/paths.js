@@ -100,6 +100,18 @@ export default {
       return `/workspace/${wsSlug}/t/${threadSlug}`;
     },
   },
+  studioCodeEmbed: {
+    chat: (slug, options = {}) => {
+      return applyOptions(`/studio/embed/${slug}`, {
+        search: { studio: "code", ...(options.search || {}) },
+      });
+    },
+    thread: (slug, threadSlug, options = {}) => {
+      return applyOptions(`/studio/embed/${slug}/t/${threadSlug}`, {
+        search: { studio: "code", ...(options.search || {}) },
+      });
+    },
+  },
   apiDocs: () => {
     return `${API_BASE}/docs`;
   },

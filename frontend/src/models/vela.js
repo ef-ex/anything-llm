@@ -211,6 +211,17 @@ const Vela = {
     return parseJson(res);
   },
 
+  listStudioCodeRoles: async function (workspaceSlug, { projectId } = {}) {
+    const qs = projectId
+      ? `?project_id=${encodeURIComponent(projectId)}`
+      : "";
+    const res = await fetch(
+      `${API_BASE}/workspace/${workspaceSlug}/vela/studio/code-roles${qs}`,
+      { headers: baseHeaders() }
+    );
+    return parseJson(res);
+  },
+
   resolveRolePreset: async function (
     workspaceSlug,
     roleId,
