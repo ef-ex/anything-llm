@@ -5,7 +5,8 @@ import ChatContainer from "./ChatContainer";
 import SplitChatLayout from "./SplitChatLayout";
 import paths from "@/utils/paths";
 import ModalWrapper from "../ModalWrapper";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
+import { isStudioCodeEmbed } from "@/utils/studioCodeRole";
 import { DnDFileUploaderProvider } from "./ChatContainer/DnDWrapper";
 import { WarningCircle } from "@phosphor-icons/react";
 import {
@@ -29,6 +30,8 @@ import {
 export default function WorkspaceChat({ loading, workspace, embedded = false }) {
   useWatchForAutoPlayAssistantTTSResponse();
   const { threadSlug = null } = useParams();
+  const [searchParams] = useSearchParams();
+  const studioCodeEmbed = isStudioCodeEmbed(searchParams);
   const [layoutMode, setLayoutMode] = useState(CHAT_LAYOUT_SINGLE);
   const [loaded, setLoaded] = useState(null);
 
@@ -60,17 +63,19 @@ export default function WorkspaceChat({ loading, workspace, embedded = false }) 
 
     const key = `${workspace.slug}:${threadSlug ?? "default"}`;
     const draft =
-      workspace?.velaProjectId != null
+      workspace?.velaProjectId != null && !studioCodeEmbed
         ? loadOrchestratorChatDraft(workspace.slug, threadSlug)
         : null;
-    const draftHistory = mergeOrchestratorChatHistory([], draft);
+    const draftHistory = studioCodeEmbed
+      ? []
+      : mergeOrchestratorChatHistory([], draft);
     setLoaded({
       key,
       workspace,
       threadSlug,
       history: draftHistory,
     });
-  }, [workspace?.slug, workspace?.velaProjectId, loading, threadSlug]);
+  }, [workspace?.slug, workspace?.velaProjectId, loading, threadSlug, studioCodeEmbed]);
 
   useEffect(() => {
     async function getHistory() {
@@ -82,7 +87,7 @@ export default function WorkspaceChat({ loading, workspace, embedded = false }) 
 
       const key = `${workspace.slug}:${threadSlug ?? "default"}`;
       const draft =
-        workspace?.velaProjectId != null
+        workspace?.velaProjectId != null && !studioCodeEmbed
           ? loadOrchestratorChatDraft(workspace.slug, threadSlug)
           : null;
 
@@ -90,7 +95,9 @@ export default function WorkspaceChat({ loading, workspace, embedded = false }) 
         ? await Workspace.threads.chatHistory(workspace.slug, threadSlug)
         : await Workspace.chatHistory(workspace.slug);
 
-      const history = mergeOrchestratorChatHistory(serverHistory, draft);
+      const history = studioCodeEmbed
+        ? serverHistory
+        : mergeOrchestratorChatHistory(serverHistory, draft);
 
       setLoaded({
         key,
@@ -100,7 +107,7 @@ export default function WorkspaceChat({ loading, workspace, embedded = false }) 
       });
     }
     getHistory();
-  }, [workspace, loading, threadSlug]);
+  }, [workspace, loading, threadSlug, studioCodeEmbed]);
 
   const splitActive = velaBound && layoutMode === CHAT_LAYOUT_SPLIT && !embedded;
 

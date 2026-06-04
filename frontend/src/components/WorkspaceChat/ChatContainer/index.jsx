@@ -56,7 +56,8 @@ import {
 } from "@/utils/orchestratorRuns";
 import {
   isStudioCodeEmbed,
-  studioCodeDispatchParams,
+  loadStudioCodeRole,
+  useOrchestratorChatForWorkspace,
 } from "@/utils/studioCodeRole";
 
 export default function ChatContainer({
@@ -74,6 +75,7 @@ export default function ChatContainer({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const studioCodeEmbed = isStudioCodeEmbed(searchParams);
+  const orchestratorUx = useOrchestratorChatForWorkspace(searchParams, workspace);
   const { t } = useTranslation();
   const [activeWorkspace, setActiveWorkspace] = useState(workspace);
   useEffect(() => {
@@ -82,7 +84,7 @@ export default function ChatContainer({
   const [loadingResponse, setLoadingResponse] = useState(false);
   const [chatHistory, setChatHistory] = useState(() => {
     if (knownHistory?.length > 0) return knownHistory;
-    if (embedded && workspace?.velaProjectId && workspace?.slug) {
+    if (embedded && orchestratorUx && workspace?.slug) {
       const draft = loadOrchestratorChatDraft(workspace.slug, threadSlug);
       if (Array.isArray(draft) && draft.length > 0) return draft;
     }
@@ -103,7 +105,7 @@ export default function ChatContainer({
     let cancelled = false;
     (async () => {
       const draft =
-        orchestratorMode && workspace?.slug
+        orchestratorUx && workspace?.slug
           ? loadOrchestratorChatDraft(workspace.slug, threadSlug)
           : null;
       const serverHistory = threadSlug
@@ -120,18 +122,18 @@ export default function ChatContainer({
     return () => {
       cancelled = true;
     };
-  }, [embedded, workspace?.slug, threadSlug, orchestratorMode]);
+  }, [embedded, workspace?.slug, threadSlug, orchestratorUx]);
 
   useEffect(() => {
-    if (!orchestratorMode || !workspace?.slug) return;
+    if (!orchestratorUx || !workspace?.slug) return;
     if (embedded && !embeddedHistoryLoadedRef.current && chatHistory.length === 0) {
       return;
     }
     saveOrchestratorChatDraft(workspace.slug, threadSlug, chatHistory);
-  }, [chatHistory, orchestratorMode, workspace?.slug, threadSlug, embedded]);
+  }, [chatHistory, orchestratorUx, workspace?.slug, threadSlug, embedded]);
 
   useEffect(() => {
-    if (!orchestratorMode || !workspace?.slug) return;
+    if (!orchestratorUx || !workspace?.slug) return;
     const onDraft = (event) => {
       const { workspaceSlug, threadSlug: slug } = event.detail || {};
       if (workspaceSlug !== workspace.slug || slug !== threadSlug) return;
@@ -142,11 +144,11 @@ export default function ChatContainer({
     window.addEventListener(VELA_ORCHESTRATOR_DRAFT_EVENT, onDraft);
     return () =>
       window.removeEventListener(VELA_ORCHESTRATOR_DRAFT_EVENT, onDraft);
-  }, [orchestratorMode, workspace?.slug, threadSlug]);
+  }, [orchestratorUx, workspace?.slug, threadSlug]);
 
   useEffect(() => {
     return () => {
-      if (orchestratorMode && workspace?.slug) {
+      if (orchestratorUx && workspace?.slug) {
         saveOrchestratorChatDraft(
           workspace.slug,
           threadSlug,
@@ -154,7 +156,7 @@ export default function ChatContainer({
         );
       }
     };
-  }, [orchestratorMode, workspace?.slug, threadSlug]);
+  }, [orchestratorUx, workspace?.slug, threadSlug]);
 
   const [socketId, setSocketId] = useState(null);
   const [websocket, setWebsocket] = useState(null);
@@ -175,7 +177,7 @@ export default function ChatContainer({
   runsByParentIdRef.current = runsByParentId;
 
   useEffect(() => {
-    if (!orchestratorMode) return;
+    if (!orchestratorUx) return;
     const activeRun = Object.values(runsByParentId).find(
       (r) =>
         r &&
@@ -202,7 +204,7 @@ export default function ChatContainer({
           : m
       );
     });
-  }, [runsByParentId, orchestratorMode]);
+  }, [runsByParentId, orchestratorUx]);
 
   const isEmpty =
     chatHistory.length === 0 && !sessionStorage.getItem(PENDING_HOME_MESSAGE);
@@ -260,7 +262,7 @@ export default function ChatContainer({
       role: "user",
       attachments: parseAttachments(),
     };
-    const prevChatHistory = orchestratorMode
+    const prevChatHistory = orchestratorUx
       ? [
           ...chatHistory,
           userEntry,
@@ -291,7 +293,7 @@ export default function ChatContainer({
       endSTTSession();
     }
     setChatHistory(prevChatHistory);
-    if (orchestratorMode) {
+    if (orchestratorUx) {
       saveOrchestratorChatDraft(workspace.slug, threadSlug, prevChatHistory);
     }
     setMessageEmit("");
@@ -387,7 +389,7 @@ export default function ChatContainer({
         role: "user",
         attachments,
       };
-      prevChatHistory = orchestratorMode
+      prevChatHistory = orchestratorUx
         ? [
             ...chatHistory,
             userEntry,
@@ -416,7 +418,7 @@ export default function ChatContainer({
     }
 
     setChatHistory(prevChatHistory);
-    if (orchestratorMode) {
+    if (orchestratorUx) {
       saveOrchestratorChatDraft(workspace.slug, threadSlug, prevChatHistory);
     }
     setMessageEmit("");
@@ -448,7 +450,7 @@ export default function ChatContainer({
 
     async function fetchReply() {
       const history = chatHistoryForReplyRef.current;
-      const { promptMessage, remHistory } = orchestratorMode
+      const { promptMessage, remHistory } = orchestratorUx
         ? resolveOrchestratorPromptTurn(history)
         : {
             promptMessage:
@@ -457,7 +459,7 @@ export default function ChatContainer({
           };
       var _chatHistory = [...remHistory];
 
-      if (orchestratorMode) {
+      if (orchestratorUx) {
         if (!promptMessage?.content?.trim()) {
           setLoadingResponse(false);
           return;
@@ -467,7 +469,7 @@ export default function ChatContainer({
         return;
       }
 
-      if (orchestratorMode && promptMessage?.content) {
+      if (orchestratorUx && promptMessage?.content) {
         if (orchestratorReplyInFlight.current) return;
         orchestratorReplyInFlight.current = true;
         saveOrchestratorChatDraft(
@@ -488,19 +490,14 @@ export default function ChatContainer({
             ? await resumeRun(openClarification, userText, {
                 parentMessageId: parentId,
               })
-            : await (() => {
-                const dispatch = studioCodeEmbed
-                  ? studioCodeDispatchParams(workspace.slug)
-                  : { roleId: null, workflowId: null };
-                return submitOrchestratorPrompt({
-                  userText,
-                  parentMessageId: parentId,
-                  history: remHistory,
-                  attachments,
-                  roleId: dispatch.roleId,
-                  workflowId: dispatch.workflowId,
-                });
-              })();
+            : await submitOrchestratorPrompt({
+                userText,
+                parentMessageId: parentId,
+                history: remHistory,
+                attachments,
+                roleId: null,
+                workflowId: null,
+              });
           const assistantText = orchestratorMainThreadReply(finalRun);
           const routingReason =
             orchestratorRoutingReason(finalRun) || undefined;
@@ -618,6 +615,20 @@ export default function ChatContainer({
       const attachments = promptMessage?.attachments ?? parseAttachments();
       window.dispatchEvent(new CustomEvent(CLEAR_ATTACHMENTS_EVENT));
 
+      if (studioCodeEmbed) {
+        const roleId = loadStudioCodeRole(workspace.slug);
+        if (roleId) {
+          try {
+            const applied = await Vela.applyRolePreset(workspace.slug, roleId);
+            if (applied?.workspace) {
+              setActiveWorkspace((prev) => ({ ...prev, ...applied.workspace }));
+            }
+          } catch (err) {
+            console.warn("[vela] studio code role preset", err);
+          }
+        }
+      }
+
       await Workspace.multiplexStream({
         workspaceSlug: workspace.slug,
         threadSlug,
@@ -639,7 +650,8 @@ export default function ChatContainer({
   }, [
     loadingResponse,
     workspace,
-    orchestratorMode,
+    orchestratorUx,
+    studioCodeEmbed,
     submitOrchestratorPrompt,
     resumeRun,
     threadSlug,
@@ -845,8 +857,10 @@ export default function ChatContainer({
                     websocket={websocket}
                     threadSlug={threadSlug}
                     embedded={embedded}
-                    orchestratorRuns={runsByParentId}
+                    orchestratorRuns={orchestratorUx ? runsByParentId : {}}
+                    hideOrchestratorChrome={studioCodeEmbed}
                     onOrchestratorResume={async (run, answer) => {
+                      if (!orchestratorUx) return;
                       setLoadingResponse(true);
                       try {
                         const finalRun = await resumeRun(run, answer);

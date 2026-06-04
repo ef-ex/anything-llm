@@ -97,7 +97,20 @@ function StudioCodeEmbedChat() {
   }
 
   return (
-    <div className="w-screen h-[100dvh] overflow-hidden bg-zinc-950 light:bg-slate-50 flex">
+    <div className="w-screen h-[100dvh] overflow-hidden bg-zinc-950 light:bg-slate-50 flex flex-col md:flex-row">
+      <aside
+        className="md:hidden shrink-0 border-b border-white/10 light:border-slate-200 bg-theme-bg-sidebar max-h-[28vh] overflow-y-auto"
+        aria-label="Code chat sessions"
+      >
+        <div className="px-3 py-2 border-b border-white/10 light:border-slate-200">
+          <p className="text-xs font-semibold text-white light:text-slate-800">
+            Sessions
+          </p>
+        </div>
+        <div className="px-1 py-1">
+          <ThreadContainer workspace={workspace} />
+        </div>
+      </aside>
       <aside
         className="hidden md:flex flex-col w-[260px] shrink-0 border-r border-white/10 light:border-slate-200 bg-theme-bg-sidebar h-full overflow-y-auto"
         aria-label="Code chat sessions"

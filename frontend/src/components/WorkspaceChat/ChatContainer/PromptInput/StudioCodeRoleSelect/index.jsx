@@ -38,6 +38,11 @@ export default function StudioCodeRoleSelect({ workspaceSlug, projectId }) {
         setRoles(list);
         setRoleId(resolved);
         saveStudioCodeRole(workspaceSlug, resolved);
+        if (resolved) {
+          Vela.applyRolePreset(workspaceSlug, resolved).catch((err) =>
+            console.warn("[vela] studio code default role", err)
+          );
+        }
       } catch (err) {
         if (!cancelled) {
           setLoadError(err?.message || "Could not load coding roles.");
@@ -75,6 +80,9 @@ export default function StudioCodeRoleSelect({ workspaceSlug, projectId }) {
           const next = e.target.value;
           setRoleId(next);
           saveStudioCodeRole(workspaceSlug, next);
+          Vela.applyRolePreset(workspaceSlug, next).catch((err) =>
+            console.warn("[vela] studio code role change", err)
+          );
         }}
       >
         {loading && <option value="">Loading…</option>}

@@ -10,6 +10,11 @@ export function isStudioCodeEmbed(searchParams) {
   return searchParams?.get("studio") === "code";
 }
 
+/** Code embed uses vela-dispatch streaming chat, not orchestrator runs/worker threads. */
+export function useOrchestratorChatForWorkspace(searchParams, workspace) {
+  return !!workspace?.velaProjectId && !isStudioCodeEmbed(searchParams);
+}
+
 export function studioCodeThreadPath(workspaceSlug, threadSlug = null) {
   if (!workspaceSlug) return "/";
   if (threadSlug) {
@@ -36,14 +41,6 @@ export function saveStudioCodeRole(workspaceSlug, roleId) {
   } catch {
     /* quota */
   }
-}
-
-export function studioCodeDispatchParams(workspaceSlug, defaultRoleId = DEFAULT_STUDIO_CODE_ROLE_ID) {
-  const roleId = loadStudioCodeRole(workspaceSlug, defaultRoleId);
-  return {
-    roleId,
-    workflowId: null,
-  };
 }
 
 export function pickDefaultRoleId(roles, serverDefaultId) {

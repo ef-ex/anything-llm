@@ -44,6 +44,7 @@ export default forwardRef(function (
     regenerateAssistantMessage,
     websocket = null,
     orchestratorRuns = {},
+    hideOrchestratorChrome = false,
     onOrchestratorResume = null,
     resumingRunId = null,
     threadSlug: threadSlugProp = null,
@@ -201,6 +202,7 @@ export default forwardRef(function (
         forkThread,
         websocket,
         orchestratorRuns,
+        hideOrchestratorChrome,
         onOrchestratorResume,
         resumingRunId,
         threadSlug,
@@ -211,6 +213,7 @@ export default forwardRef(function (
       regenerateAssistantMessage,
       saveEditedMessage,
       forkThread,
+      hideOrchestratorChrome,
       websocket,
       orchestratorRuns,
       onOrchestratorResume,
@@ -305,6 +308,7 @@ function buildMessages({
   forkThread,
   websocket,
   orchestratorRuns = {},
+  hideOrchestratorChrome = false,
   onOrchestratorResume = null,
   resumingRunId = null,
   threadSlug = null,
@@ -374,7 +378,11 @@ function buildMessages({
       acc.push(<Chartable key={props.uuid} props={props} />);
     } else if (props.type === "fileDownloadCard" && !!props.content) {
       acc.push(<FileDownloadCard key={props.uuid} props={props} />);
-    } else if (props.velaOrchestratorPending && props.pending) {
+    } else if (
+      !hideOrchestratorChrome &&
+      props.velaOrchestratorPending &&
+      props.pending
+    ) {
       acc.push(
         <div key={`vela-pending-${props.uuid || index}`} className="w-full flex justify-start px-4 py-2">
           <div className="w-full max-w-[85%]">
@@ -437,7 +445,7 @@ function buildMessages({
           velaRoutingReason={resolvedRoutingReason}
         />
       );
-      if (props.role === "user") {
+      if (props.role === "user" && !hideOrchestratorChrome) {
         const run = runForTurn;
         const routing = run
           ? orchestratorRoutingReason(run)
@@ -445,7 +453,7 @@ function buildMessages({
         if (routing && (!run || !isActiveOrchestratorStatus(run.status))) {
           acc.push(
             <VelaReasoningBlock
-              key={`vela-reasoning-${run.run_id}`}
+              key={`vela-reasoning-${run?.run_id || props.uuid}`}
               reason={routing}
               isThinking={false}
               messageId={props.uuid}

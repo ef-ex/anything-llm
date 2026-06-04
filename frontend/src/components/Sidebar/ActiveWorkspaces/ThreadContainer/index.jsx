@@ -44,7 +44,9 @@ export default function ThreadContainer({ workspace }) {
 
   const fetchThreads = useCallback(async () => {
     if (!workspace.slug) return;
-    await repairWorkerThreadParentsAsync(workspace.slug);
+    if (!studioCode) {
+      await repairWorkerThreadParentsAsync(workspace.slug);
+    }
     const { threads } = await Workspace.threads.all(workspace.slug);
     setLoading(false);
     const visible = studioCode
