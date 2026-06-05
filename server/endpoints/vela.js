@@ -22,6 +22,13 @@ function studioCodeWorkspaceName(projectName, projectId) {
   return `Code — ${label || projectId}`;
 }
 
+function studioAskWorkspaceName(projectName, projectId) {
+  const label = (projectName || "Project").trim().slice(0, 120);
+  return `Ask — ${label || projectId}`;
+}
+
+const STUDIO_ASSISTANT_ROLE_ID = "studio-assistant";
+
 function isVelaChatInternalRequest(request) {
   const expected = process.env.VELA_CHAT_INTERNAL_TOKEN;
   if (!expected) return false;
@@ -105,6 +112,136 @@ function velaEndpoints(app) {
       }
     }
   );
+
+  app.post(
+    "/vela/studio/ensure-ask-workspace",
+    async (request, response) => {
+      if (!isVelaChatInternalRequest(request)) {
+        return response.status(403).json({ error: "Forbidden" });
+      }
+      try {
+        const body = reqBody(request);
+        const projectId = body.project_id;
+        const projectName = body.project_name;
+        const hubUserId = body.user_id;
+        if (!projectId || typeof projectId !== "string") {
+          return response.status(400).json({ error: "project_id is required" });
+        }
+
+        let workspace = await Workspace.get({
+          velaProjectId: projectId,
+          velaRolePresetId: STUDIO_ASSISTANT_ROLE_ID,
+        });
+        if (workspace) {
+          const { workspace: updated, message } = await Workspace.update(
+            workspace.id,
+            {
+              chatProvider: "vela-dispatch",
+              velaRolePresetId: STUDIO_ASSISTANT_ROLE_ID,
+              chatMode: "agent",
+            }
+          );
+          workspace = updated || workspace;
+          if (!workspace) {
+            return response.status(500).json({
+              error: message || "Failed to update ask workspace.",
+            });
+          }
+          return response.status(200).json({
+            slug: workspace.slug,
+            workspace_id: workspace.id,
+            created: false,
+          });
+        }
+
+        const { workspace: created, message } = await Workspace.new(
+          studioAskWorkspaceName(projectName, projectId),
+          null,
+          {
+            velaProjectId: projectId,
+            velaRolePresetId: STUDIO_ASSISTANT_ROLE_ID,
+            chatProvider: "vela-dispatch",
+            chatMode: "agent",
+          }
+        );
+        if (!created) {
+          return response.status(500).json({
+            error: message || "Failed to create ask workspace.",
+          });
+        }
+
+        const grantResult = await velaApiRequest(
+          `projects/${projectId}/grant-access`,
+          {
+            method: "POST",
+            query: { user_id: hubUserId || "admin-user" },
+          }
+        );
+        if (!grantResult.ok) {
+          console.warn(
+            `[vela] grant-access skipped for studio ask workspace ${projectId}: ${grantResult.error}`
+          );
+        }
+
+        return response.status(201).json({
+          slug: created.slug,
+          workspace_id: created.id,
+          created: true,
+        });
+      } catch (e) {
+        console.error(e);
+        return response
+          .status(500)
+          .json({ error: "Could not prepare ask workspace." });
+      }
+    }
+  );
+
+  app.post("/vela/studio/assistant-stream", async (request, response) => {
+    if (!isVelaChatInternalRequest(request)) {
+      return response.status(403).json({ error: "Forbidden" });
+    }
+    try {
+      const body = reqBody(request);
+      const workspaceSlug = body.workspace_slug;
+      const message = String(body.message || "").trim();
+      const hubUserId = body.user_id || null;
+      const threadSlug = body.thread_slug || null;
+      const attachments = Array.isArray(body.attachments) ? body.attachments : [];
+
+      if (!workspaceSlug) {
+        return response.status(400).json({ error: "workspace_slug is required" });
+      }
+      if (!message) {
+        return response.status(400).json({ error: "message is required" });
+      }
+
+      const workspace = await Workspace.get({ slug: workspaceSlug });
+      if (!workspace) {
+        return response.status(404).json({ error: "workspace not found" });
+      }
+      if (workspace.velaRolePresetId !== STUDIO_ASSISTANT_ROLE_ID) {
+        return response.status(400).json({ error: "not a studio assistant workspace" });
+      }
+
+      const { streamStudioAssistant } = require("../utils/velaAskAssistant");
+      await streamStudioAssistant({
+        response,
+        workspace,
+        message,
+        userId: hubUserId,
+        threadSlug,
+        attachments,
+      });
+      response.end();
+    } catch (e) {
+      console.error(e);
+      if (!response.headersSent) {
+        return response.status(500).json({ error: "Assistant stream failed." });
+      }
+      response.end();
+    }
+  });
 
   app.get(
     "/workspace/:slug/vela/studio/code-roles",
