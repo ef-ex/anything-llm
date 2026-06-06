@@ -36,6 +36,9 @@ function ensureVelaStudioMcpConfig() {
       VELA_API_URL: process.env.VELA_API_URL || "http://127.0.0.1:7001",
       VELA_CHAT_INTERNAL_TOKEN: process.env.VELA_CHAT_INTERNAL_TOKEN || "",
       VELA_DATA_DIR: process.env.VELA_DATA_DIR || "",
+      VELA_DOCS_PATH:
+        process.env.VELA_DOCS_PATH ||
+        path.resolve(__dirname, "../../../docs/user"),
     },
     anythingllm: {
       suppressedTools: [],
