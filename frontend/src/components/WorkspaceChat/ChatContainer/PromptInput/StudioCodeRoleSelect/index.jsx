@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import Vela from "@/models/vela";
 import {
   isStudioCodeEmbed,
+  isStudioAskEmbed,
   resolveStoredRoleId,
   saveStudioCodeRole,
 } from "@/utils/studioCodeRole";
@@ -22,7 +23,12 @@ export default function StudioCodeRoleSelect({
   const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
-    if (!isStudioCodeEmbed(searchParams) || !workspaceSlug || !projectId) {
+    if (
+      !isStudioCodeEmbed(searchParams) ||
+      isStudioAskEmbed(searchParams) ||
+      !workspaceSlug ||
+      !projectId
+    ) {
       setLoading(false);
       return;
     }
@@ -62,7 +68,13 @@ export default function StudioCodeRoleSelect({
     };
   }, [searchParams, workspaceSlug, projectId, threadSlug]);
 
-  if (!isStudioCodeEmbed(searchParams) || !workspaceSlug) return null;
+  if (
+    !isStudioCodeEmbed(searchParams) ||
+    isStudioAskEmbed(searchParams) ||
+    !workspaceSlug
+  ) {
+    return null;
+  }
 
   const selected = roles.find((r) => r.id === roleId);
   const label = selected?.display_name || "Role";

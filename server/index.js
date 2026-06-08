@@ -6,6 +6,14 @@ const { applyDevChatTokenFromHubRepo } = require("./utils/velaDevEnv");
 applyDevChatTokenFromHubRepo();
 
 require("./utils/logger")();
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[vela] unhandledRejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[vela] uncaughtException:", err);
+});
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");

@@ -56,9 +56,19 @@ import {
 } from "@/utils/orchestratorRuns";
 import {
   isStudioCodeEmbed,
+  isStudioAskEmbed,
+  isStudioEmbed,
+  STUDIO_ASSISTANT_ROLE_ID,
   resolveStoredRoleId,
   useOrchestratorChatForWorkspace,
 } from "@/utils/studioCodeRole";
+import {
+  initStudioAskContextBridge,
+  takePendingAskAttachments,
+  formatAskMessageWithContext,
+  attachmentsToActionRefs,
+  postAskActionRefsToParent,
+} from "@/utils/studioAskContext";
 import { useStudioCodeContext, emitStudioCodeContextRefresh } from "@/contexts/StudioCodeContext";
 import { contextFillBorderClass } from "@/utils/studioCodeContext";
 
@@ -82,6 +92,8 @@ export default function ChatContainer({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const studioCodeEmbed = isStudioCodeEmbed(searchParams);
+  const studioAskEmbed = isStudioAskEmbed(searchParams);
+  const studioEmbed = isStudioEmbed(searchParams);
   const orchestratorUx = useOrchestratorChatForWorkspace(searchParams, workspace);
   const studioCtx = useStudioCodeContext();
   const { t } = useTranslation();
@@ -135,6 +147,11 @@ export default function ChatContainer({
       cancelled = true;
     };
   }, [studioCodeEmbed, workspace?.slug, workspace?.velaProjectId]);
+
+  useEffect(() => {
+    if (!studioAskEmbed) return;
+    initStudioAskContextBridge();
+  }, [studioAskEmbed]);
 
   useEffect(() => {
     if (!embedded || !workspace?.slug) return;
@@ -673,7 +690,19 @@ export default function ChatContainer({
       window.dispatchEvent(new CustomEvent(CLEAR_ATTACHMENTS_EVENT));
 
       let studioCodeRoleId = null;
-      if (studioCodeEmbed) {
+      let promptText = promptMessage.userMessage;
+      if (studioAskEmbed) {
+        const askAttachments = takePendingAskAttachments();
+        if (askAttachments.length) {
+          promptText = formatAskMessageWithContext(
+            askAttachments,
+            promptMessage.userMessage
+          );
+          const actionRefs = attachmentsToActionRefs(askAttachments);
+          if (actionRefs.length) postAskActionRefsToParent(actionRefs);
+        }
+        studioCodeRoleId = STUDIO_ASSISTANT_ROLE_ID;
+      } else if (studioEmbed) {
         if (studioCodeResolvedRoleId) {
           studioCodeRoleId = studioCodeResolvedRoleId;
         } else {
@@ -715,7 +744,7 @@ export default function ChatContainer({
       await Workspace.multiplexStream({
         workspaceSlug: workspace.slug,
         threadSlug,
-        prompt: promptMessage.userMessage,
+        prompt: promptText,
         chatHandler: (chatResult) =>
           handleChat(
             chatResult,
@@ -727,7 +756,7 @@ export default function ChatContainer({
           ),
         attachments,
         roleId: studioCodeRoleId,
-        studioCodeAgent: studioCodeEmbed,
+        studioCodeAgent: studioEmbed,
       });
       return;
     }
@@ -736,7 +765,8 @@ export default function ChatContainer({
     loadingResponse,
     workspace,
     orchestratorUx,
-    studioCodeEmbed,
+    studioEmbed,
+    studioAskEmbed,
     studioCodeResolvedRoleId,
     studioCodeAssistantRoleId,
     studioCodeSplitPaneIndex,
@@ -954,7 +984,7 @@ export default function ChatContainer({
                     threadSlug={threadSlug}
                     embedded={embedded}
                     orchestratorRuns={orchestratorUx ? runsByParentId : {}}
-                    hideOrchestratorChrome={studioCodeEmbed}
+                    hideOrchestratorChrome={studioEmbed}
                     onOrchestratorResume={async (run, answer) => {
                       if (!orchestratorUx) return;
                       setLoadingResponse(true);

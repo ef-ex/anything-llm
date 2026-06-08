@@ -55,6 +55,7 @@ function mcpIdsFromToolClasses(toolClasses) {
  * @param {object} bindings
  * @returns {string[]}
  */
+/** @deprecated Hub agent runtime owns MCP bindings; kept for legacy tests only. */
 function toolOverridesFromBindings(bindings) {
   const overrides = [];
   const mcps = Array.isArray(bindings?.mcp_servers) ? bindings.mcp_servers : [];
@@ -62,11 +63,6 @@ function toolOverridesFromBindings(bindings) {
     const id = mcp?.id;
     if (typeof id === "string" && id.trim()) {
       overrides.push(`@@mcp_${id.trim()}`);
-    }
-  }
-  if (overrides.length === 0) {
-    for (const id of mcpIdsFromToolClasses(bindings?.allowed_tool_classes)) {
-      overrides.push(`@@mcp_${id}`);
     }
   }
   return overrides;

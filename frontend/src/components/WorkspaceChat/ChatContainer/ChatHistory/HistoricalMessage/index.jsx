@@ -22,6 +22,7 @@ import HistoricalOutputs from "./HistoricalOutputs";
 import HistoricalClarifyingQuestions from "./HistoricalClarifyingQuestions";
 import { openImageLightbox } from "@/components/ImageLightbox";
 import VelaReasoningBlock from "../../VelaReasoningBlock";
+import AgentTimeline from "../../AgentTimeline";
 
 const HistoricalMessage = ({
   uuid: uuidProp,
@@ -41,6 +42,9 @@ const HistoricalMessage = ({
   outputs = [],
   clarifyingQuestions = [],
   velaRoutingReason = null,
+  agentEvents = [],
+  reasoning = "",
+  velaAgent = false,
 }) => {
   // Freeze uuid on first render. User messages arrive without a uuid and this value
   // is used as the wrapper div's `key` — a default param fallback would regenerate
@@ -149,15 +153,26 @@ const HistoricalMessage = ({
           />
         ) : (
           <div className="break-words w-full max-w-[85%]">
-            {role === "assistant" && velaRoutingReason && (
+            {role === "assistant" && velaRoutingReason && !agentEvents?.length && (
               <VelaReasoningBlock
                 reason={velaRoutingReason}
                 isThinking={false}
                 messageId={uuid}
               />
             )}
+            {role === "assistant" && (velaAgent || agentEvents?.length > 0) ? (
+              <AgentTimeline
+                agentEvents={agentEvents}
+                reasoning={reasoning}
+              />
+            ) : null}
             <HistoricalClarifyingQuestions surveys={clarifyingQuestions} />
-            <RenderChatContent role={role} message={message} messageId={uuid} />
+            <RenderChatContent
+              role={role}
+              message={message}
+              messageId={uuid}
+              velaAgent={velaAgent}
+            />
             {isRefusalMessage && (
               <Link
                 data-tooltip-id="query-refusal-info"
@@ -307,7 +322,7 @@ function TruncatableContent({ children }) {
 }
 
 const RenderChatContent = memo(
-  ({ role, message, messageId, velaRoutingReason = null }) => {
+  ({ role, message, messageId, velaAgent = false }) => {
     // If the message is not from the assistant, we can render it directly
     // as normal since the user cannot think (lol)
     if (role !== "assistant")
@@ -322,6 +337,17 @@ const RenderChatContent = memo(
     let thoughtChain = null;
     let msgToRender = message;
     if (!message) return null;
+
+    if (velaAgent) {
+      return (
+        <span
+          className="flex flex-col gap-y-1 text-white light:text-slate-900"
+          dangerouslySetInnerHTML={{
+            __html: DOMPurify.sanitize(renderMarkdown(msgToRender)),
+          }}
+        />
+      );
+    }
 
     // If the message is a perfect thought chain, we can render it directly
     // Complete == open and close tags match perfectly.
@@ -360,7 +386,7 @@ const RenderChatContent = memo(
       prevProps.role === nextProps.role &&
       prevProps.message === nextProps.message &&
       prevProps.messageId === nextProps.messageId &&
-      prevProps.messageId === nextProps.messageId
+      prevProps.velaAgent === nextProps.velaAgent
     );
   }
 );

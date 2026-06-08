@@ -44,8 +44,8 @@ async function grepAgents({
   thread = null,
   attachments = [],
 }) {
-  // Vela dispatch: Studio Assistant and Code agents use dedicated HTTP agent streams
-  // (assistant-stream / streamCodeAgent). Block legacy websocket @agent path here.
+  // Vela dispatch: Studio Assistant and Code use Hub unified agent runtime (velaAgentRuntime.js).
+  // Block legacy websocket @agent path here.
   if (workspace?.chatProvider === "vela-dispatch") {
     return false;
   }

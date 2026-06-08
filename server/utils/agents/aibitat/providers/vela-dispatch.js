@@ -13,7 +13,8 @@ const CODE_AGENT_TIMEOUT_MS = parseInt(
 const INCLUDE_HUB_CONTEXT = process.env.VELA_CODE_AGENT_INCLUDE_CONTEXT === "1";
 
 /**
- * AIbitat provider for Vela Hub dispatch (studio-assistant agent loop).
+ * @deprecated Vela workspaces use Hub-owned unified agent runtime (velaAgentRuntime.js).
+ * Retained only for non-Vela AnythingLLM agent flows that still reference this provider.
  */
 class VelaDispatchProvider extends Provider {
   constructor(config = {}) {

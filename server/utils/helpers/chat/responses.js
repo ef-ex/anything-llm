@@ -216,6 +216,14 @@ function convertToChatHistory(history = []) {
         ...(data?.clarifyingQuestions?.length > 0
           ? { clarifyingQuestions: data.clarifyingQuestions }
           : {}),
+        ...(Array.isArray(data?.agentEvents) && data.agentEvents.length > 0
+          ? {
+              agentEvents: data.agentEvents,
+              runId: data.runId,
+              velaAgent: true,
+            }
+          : {}),
+        ...(data?.reasoning ? { reasoning: data.reasoning } : {}),
       },
     ]);
   }
@@ -326,6 +334,9 @@ function safeJSONStringify(obj) {
 
 function writeResponseChunk(response, data) {
   response.write(`data: ${safeJSONStringify(data)}\n\n`);
+  if (typeof response.flush === "function") {
+    response.flush();
+  }
   return;
 }
 

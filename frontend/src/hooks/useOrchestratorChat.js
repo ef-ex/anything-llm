@@ -1,8 +1,9 @@
+/** @deprecated Legacy Hub orchestrator chat — Studio Code/Ask embeds use the unified agent runtime. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { v4 } from "uuid";
 import Vela from "@/models/vela";
-import { isStudioCodeEmbed } from "@/utils/studioCodeRole";
+import { isStudioEmbed } from "@/utils/studioCodeRole";
 import {
   ensureWorkerThread,
   isTerminalStatus,
@@ -40,7 +41,7 @@ export default function useOrchestratorChat({
   workerOriginThreadSlug = null,
 }) {
   const [searchParams] = useSearchParams();
-  const studioCodeEmbed = isStudioCodeEmbed(searchParams);
+  const studioEmbed = isStudioEmbed(searchParams);
   const [runsByParentId, setRunsByParentId] = useState({});
   const [resumingRunId, setResumingRunId] = useState(null);
   const pollingRef = useRef(new Set());
@@ -67,7 +68,7 @@ export default function useOrchestratorChat({
       onRunUpdateRef.current?.(parentMessageId, run);
 
       if (
-        !studioCodeEmbed &&
+        !studioEmbed &&
         run.role_id &&
         run.role_id !== "orchestrator" &&
         (run.status === "classifying" ||
@@ -90,7 +91,7 @@ export default function useOrchestratorChat({
       threadSlug,
       parentThreadSlug,
       workerOriginThreadSlug,
-      studioCodeEmbed,
+      studioEmbed,
     ]
   );
 

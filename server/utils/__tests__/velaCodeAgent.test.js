@@ -25,14 +25,11 @@ describe("velaCodeAgent", () => {
     ).toEqual(["@@mcp_vela-code", "@@mcp_vela-studio"]);
   });
 
-  test("toolOverridesFromBindings defaults from tool classes", () => {
+  test("toolOverridesFromBindings requires Hub mcp_servers (no client fallback)", () => {
     expect(
       toolOverridesFromBindings({ allowed_tool_classes: ["research"] })
-    ).toEqual(["@@mcp_vela-studio"]);
-    expect(
-      toolOverridesFromBindings({ allowed_tool_classes: ["code"] })
-    ).toEqual(["@@mcp_vela-code"]);
-    expect(toolOverridesFromBindings({})).toEqual(["@@mcp_vela-studio"]);
+    ).toEqual([]);
+    expect(toolOverridesFromBindings({})).toEqual([]);
   });
 
   test("shouldUseCodeAgentLoop for code workspace", () => {

@@ -13,9 +13,18 @@ export function isStudioCodeEmbed(searchParams) {
   return searchParams?.get("studio") === "code";
 }
 
+export function isStudioAskEmbed(searchParams) {
+  return searchParams?.get("studio") === "ask";
+}
+
+/** Studio embeds use vela-dispatch agent runtime, not Hub orchestrator chat. */
+export function isStudioEmbed(searchParams) {
+  return isStudioCodeEmbed(searchParams) || isStudioAskEmbed(searchParams);
+}
+
 /** Code embed uses vela-dispatch streaming chat, not orchestrator runs/worker threads. */
 export function useOrchestratorChatForWorkspace(searchParams, workspace) {
-  return !!workspace?.velaProjectId && !isStudioCodeEmbed(searchParams);
+  return !!workspace?.velaProjectId && !isStudioEmbed(searchParams);
 }
 
 export function studioCodeThreadPath(workspaceSlug, threadSlug = null) {
@@ -24,6 +33,14 @@ export function studioCodeThreadPath(workspaceSlug, threadSlug = null) {
     return paths.studioCodeEmbed.thread(workspaceSlug, threadSlug);
   }
   return paths.studioCodeEmbed.chat(workspaceSlug);
+}
+
+export function studioAskThreadPath(workspaceSlug, threadSlug = null) {
+  if (!workspaceSlug) return "/";
+  if (threadSlug) {
+    return paths.studioAskEmbed.thread(workspaceSlug, threadSlug);
+  }
+  return paths.studioAskEmbed.chat(workspaceSlug);
 }
 
 function storageKey(workspaceSlug, threadSlug = null) {

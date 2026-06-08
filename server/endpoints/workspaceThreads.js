@@ -18,6 +18,9 @@ const {
 } = require("../utils/middleware/validWorkspace");
 const { WorkspaceChats } = require("../models/workspaceChats");
 const { convertToChatHistory } = require("../utils/helpers/chat/responses");
+const {
+  enrichHistoryWithHubAgentEvents,
+} = require("../utils/helpers/chat/agentRunReload");
 const { getModelTag } = require("./utils");
 
 function workspaceThreadEndpoints(app) {
@@ -54,10 +57,19 @@ function workspaceThreadEndpoints(app) {
           },
           user?.id
         );
+        if (!thread) {
+          return response.status(500).json({
+            thread: null,
+            error: message || "Could not create thread.",
+          });
+        }
         response.status(200).json({ thread, message });
       } catch (e) {
         console.error(e.message, e);
-        response.sendStatus(500).end();
+        response.status(500).json({
+          thread: null,
+          error: e.message || "Could not create thread.",
+        });
       }
     }
   );
@@ -135,7 +147,7 @@ function workspaceThreadEndpoints(app) {
         const user = await userFromSession(request, response);
         const workspace = response.locals.workspace;
         const thread = response.locals.thread;
-        const history = await WorkspaceChats.where(
+        let history = await WorkspaceChats.where(
           {
             workspaceId: workspace.id,
             user_id: user?.id || null,
@@ -146,6 +158,10 @@ function workspaceThreadEndpoints(app) {
           null,
           { id: "asc" }
         );
+
+        if (workspace?.velaProjectId && workspace?.chatProvider === "vela-dispatch") {
+          history = await enrichHistoryWithHubAgentEvents(history);
+        }
 
         response.status(200).json({ history: convertToChatHistory(history) });
       } catch (e) {

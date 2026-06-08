@@ -11,7 +11,14 @@ import {
   ThoughtChainComponent,
 } from "../ThoughtContainer";
 
-const PromptReply = ({ uuid, reply, pending, error, sources = [] }) => {
+const PromptReply = ({
+  uuid,
+  reply,
+  pending,
+  error,
+  sources = [],
+  velaAgent = false,
+}) => {
   if (!reply && sources.length === 0 && !pending && !error) return null;
 
   if (pending) {
@@ -45,6 +52,7 @@ const PromptReply = ({ uuid, reply, pending, error, sources = [] }) => {
           key={`${uuid}-prompt-reply-content`}
           message={reply}
           messageId={uuid}
+          velaAgent={velaAgent}
         />
         <Citations sources={sources} />
       </div>
@@ -52,11 +60,15 @@ const PromptReply = ({ uuid, reply, pending, error, sources = [] }) => {
   );
 };
 
-function RenderAssistantChatContent({ message, messageId }) {
+function RenderAssistantChatContent({ message, messageId, velaAgent = false }) {
   const contentRef = useRef("");
   const thoughtChainRef = useRef(null);
 
   useEffect(() => {
+    if (velaAgent) {
+      contentRef.current = message;
+      return;
+    }
     const thinking =
       message.match(THOUGHT_REGEX_OPEN) && !message.match(THOUGHT_REGEX_CLOSE);
 
@@ -73,7 +85,18 @@ function RenderAssistantChatContent({ message, messageId }) {
     }
 
     contentRef.current = msgToRender;
-  }, [message]);
+  }, [message, velaAgent]);
+
+  if (velaAgent) {
+    return (
+      <span
+        className="break-words"
+        dangerouslySetInnerHTML={{
+          __html: DOMPurify.sanitize(renderMarkdown(message || "")),
+        }}
+      />
+    );
+  }
 
   const thinking =
     message.match(THOUGHT_REGEX_OPEN) && !message.match(THOUGHT_REGEX_CLOSE);

@@ -112,6 +112,18 @@ export default {
       });
     },
   },
+  studioAskEmbed: {
+    chat: (slug, options = {}) => {
+      return applyOptions(`/studio/embed/${slug}`, {
+        search: { studio: "ask", ...(options.search || {}) },
+      });
+    },
+    thread: (slug, threadSlug, options = {}) => {
+      return applyOptions(`/studio/embed/${slug}/t/${threadSlug}`, {
+        search: { studio: "ask", ...(options.search || {}) },
+      });
+    },
+  },
   apiDocs: () => {
     return `${API_BASE}/docs`;
   },

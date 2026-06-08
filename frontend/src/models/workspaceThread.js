@@ -21,19 +21,34 @@ const WorkspaceThread = {
     return { threads };
   },
   new: async function (workspaceSlug) {
-    const { thread, error } = await fetch(
-      `${API_BASE}/workspace/${workspaceSlug}/thread/new`,
-      {
-        method: "POST",
-        headers: baseHeaders(),
+    try {
+      const res = await fetch(
+        `${API_BASE}/workspace/${workspaceSlug}/thread/new`,
+        {
+          method: "POST",
+          headers: baseHeaders(),
+        }
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.thread) {
+        return {
+          thread: null,
+          error:
+            body?.error ||
+            body?.message ||
+            `Could not create thread (HTTP ${res.status}). Is the chat API running on port 7003?`,
+        };
       }
-    )
-      .then((res) => res.json())
-      .catch((e) => {
-        return { thread: null, error: e.message };
-      });
-
-    return { thread, error };
+      return { thread: body.thread, error: null };
+    } catch (e) {
+      return {
+        thread: null,
+        error:
+          e?.message === "Failed to fetch"
+            ? "Chat API is not reachable. Start the dev stack (port 7003): .\\scripts\\launch-dev.ps1"
+            : e.message,
+      };
+    }
   },
   update: async function (workspaceSlug, threadSlug, data = {}) {
     const { thread, message } = await fetch(

@@ -6,9 +6,10 @@ const { getVectorDbClass, resolveProviderConnector } = require("../helpers");
 const { writeResponseChunk } = require("../helpers/chat/responses");
 const { grepAgents } = require("./agents");
 const {
-  shouldUseCodeAgentLoop,
-  streamCodeAgent,
-} = require("../velaCodeAgent");
+  isVelaAgentWorkspace,
+  streamVelaAgent,
+} = require("../velaAgentRuntime");
+const { shouldUseCodeAgentLoop } = require("../velaCodeWorkspace");
 const {
   isVelaDispatchFastPath,
   shouldIncludePinnedOnFastPath,
@@ -61,8 +62,13 @@ async function streamChatWithWorkspace(
   });
   if (isAgentChat) return;
 
-  if (shouldUseCodeAgentLoop(workspace, streamOptions)) {
-    await streamCodeAgent({
+  if (
+    isVelaAgentWorkspace(workspace) &&
+    (shouldUseCodeAgentLoop(workspace, streamOptions) ||
+      streamOptions?.studioCodeAgent ||
+      streamOptions?.roleId)
+  ) {
+    await streamVelaAgent({
       response,
       workspace,
       message: updatedMessage,
@@ -70,7 +76,10 @@ async function streamChatWithWorkspace(
       thread,
       attachments,
       uuid,
-      options: streamOptions,
+      options: {
+        ...streamOptions,
+        mode: streamOptions?.studioCodeAgent ? "code" : "assistant",
+      },
     });
     return;
   }

@@ -1,10 +1,11 @@
 const { v4: uuidv4 } = require("uuid");
 const { WorkspaceThread } = require("../models/workspaceThread");
 const { STUDIO_ASSISTANT_ROLE_ID } = require("./velaCodeWorkspace");
-const { streamCodeAgent } = require("./velaCodeAgent");
+const { streamVelaAgent } = require("./velaAgentRuntime");
 
 /**
- * Studio Ask panel — always uses Hub role studio-assistant (no Code role picker).
+ * @deprecated Studio Ask uses the embedded chat stack (?studio=ask). Kept for internal assistant-stream shim.
+ * Studio Ask — always uses Hub role studio-assistant (no Code role picker).
  * @param {object} params
  */
 async function streamStudioAssistant({
@@ -23,7 +24,7 @@ async function streamStudioAssistant({
     });
   }
 
-  await streamCodeAgent({
+  await streamVelaAgent({
     response,
     workspace,
     message,
@@ -33,7 +34,7 @@ async function streamStudioAssistant({
     uuid: uuidv4(),
     options: {
       roleId: STUDIO_ASSISTANT_ROLE_ID,
-      studioCodeAgent: true,
+      mode: "assistant",
       hubUserId:
         userId != null && String(userId).trim() ? String(userId).trim() : null,
     },

@@ -27,7 +27,19 @@ export default defineConfig(({ mode }) => {
       host: "localhost",
       proxy: {
         // Artist Studio shell + Hub APIs (source files live in velaHub/static/).
-        "/api": { target: velaHub, changeOrigin: true },
+        "/api": {
+          target: velaHub,
+          changeOrigin: true,
+          configure: (proxy) => {
+            proxy.on("proxyRes", (proxyRes) => {
+              const type = String(proxyRes.headers["content-type"] || "");
+              if (type.includes("text/event-stream")) {
+                proxyRes.headers["cache-control"] = "no-cache";
+                proxyRes.headers["x-accel-buffering"] = "no";
+              }
+            });
+          },
+        },
         "/studio.html": { target: velaHub, changeOrigin: true },
         "/studio.css": { target: velaHub, changeOrigin: true },
         "/styles.css": { target: velaHub, changeOrigin: true },

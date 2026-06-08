@@ -318,6 +318,16 @@ function buildMessages({
       index === history.length - 1 && props.role === "assistant";
 
     if (props?.type === "statusResponse" && !!props.content) {
+      const nextAssistant = history
+        .slice(index + 1)
+        .find((m) => m?.role === "assistant" && m?.velaAgent);
+      const prevAssistant = history
+        .slice(0, index)
+        .reverse()
+        .find((m) => m?.role === "assistant" && m?.velaAgent);
+      if (nextAssistant || prevAssistant) {
+        return acc;
+      }
       if (acc.length > 0 && Array.isArray(acc[acc.length - 1])) {
         acc[acc.length - 1].push(props);
       } else {
@@ -327,6 +337,12 @@ function buildMessages({
     }
 
     if (props.type === "modelRouteNotification") {
+      const pairedAssistant = history.find(
+        (m) => m?.uuid === props.uuid && m?.velaAgent
+      );
+      if (pairedAssistant) {
+        return acc;
+      }
       const lastMsg = history[history.length - 1];
       const isLast =
         index === history.length - 1 ||
@@ -396,6 +412,28 @@ function buildMessages({
       );
       return acc;
     } else if (isLastBotReply && props.animate) {
+      if (
+        props.velaAgent ||
+        props.agentEvents?.length ||
+        props.agentTimeline ||
+        props.reasoning
+      ) {
+        acc.push(
+          <div
+            key={`agent-timeline-${props.uuid || index}`}
+            className="w-full flex justify-start px-0"
+          >
+            <div className="w-full max-w-[85%] pl-0 pr-4">
+              <VelaReasoningBlock
+                agentEvents={props.agentEvents || props.agentTimeline?.events}
+                reasoning={props.reasoning || props.agentTimeline?.reasoning}
+                route={props.velaRoute || props.agentTimeline?.route}
+                live
+              />
+            </div>
+          </div>
+        );
+      }
       acc.push(
         <PromptReply
           key={`prompt-reply-${props.uuid || index}`}
@@ -405,6 +443,7 @@ function buildMessages({
           sources={props.sources}
           error={props.error}
           closed={props.closed}
+          velaAgent={Boolean(props.velaAgent)}
         />
       );
     } else {
@@ -443,6 +482,9 @@ function buildMessages({
           outputs={props.outputs}
           clarifyingQuestions={props.clarifyingQuestions}
           velaRoutingReason={resolvedRoutingReason}
+          agentEvents={props.agentEvents}
+          reasoning={props.reasoning}
+          velaAgent={Boolean(props.velaAgent)}
         />
       );
       if (props.role === "user" && !hideOrchestratorChrome) {

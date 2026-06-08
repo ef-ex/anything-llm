@@ -199,6 +199,7 @@ function velaEndpoints(app) {
     }
   );
 
+  // Legacy Ask SSE proxy — Studio Ask now uses the embedded chat stack (?studio=ask).
   app.post("/vela/studio/assistant-stream", async (request, response) => {
     if (!isVelaChatInternalRequest(request)) {
       return response.status(403).json({ error: "Forbidden" });
@@ -224,6 +225,13 @@ function velaEndpoints(app) {
       }
       if (workspace.velaRolePresetId !== STUDIO_ASSISTANT_ROLE_ID) {
         return response.status(400).json({ error: "not a studio assistant workspace" });
+      }
+
+      response.setHeader("Cache-Control", "no-cache");
+      response.setHeader("Content-Type", "text/event-stream");
+      response.setHeader("Connection", "keep-alive");
+      if (typeof response.flushHeaders === "function") {
+        response.flushHeaders();
       }
 
       const { streamStudioAssistant } = require("../utils/velaAskAssistant");

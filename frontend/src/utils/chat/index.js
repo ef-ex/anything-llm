@@ -1,5 +1,6 @@
 import { THREAD_RENAME_EVENT } from "@/components/Sidebar/ActiveWorkspaces/ThreadContainer";
 import { emitAssistantMessageCompleteEvent } from "@/components/contexts/TTSProvider";
+import { applyAgentEvent, createAgentTimelineState } from "@/utils/agentEvents";
 export const ABORT_STREAM_EVENT = "abort-chat-stream";
 
 // For handling of chat responses in the frontend by their various types.
@@ -29,6 +30,9 @@ export default function handleChat(
   const uuid = rawUuid || streamId;
 
   if (type === "modelRouteNotification") {
+    if (_chatHistory.some((chat) => chat.uuid === uuid && chat.velaAgent)) {
+      return;
+    }
     _chatHistory.push({
       type: "modelRouteNotification",
       uuid,
@@ -98,7 +102,54 @@ export default function handleChat(
       metrics,
     });
     emitAssistantMessageCompleteEvent(chatId);
+  } else if (type === "agentEvent") {
+    const hubEvent = chatResult.event;
+    const chatIdx = _chatHistory.findIndex((chat) => chat.uuid === uuid);
+    const base =
+      chatIdx !== -1
+        ? { ..._chatHistory[chatIdx] }
+        : {
+            uuid,
+            role: "assistant",
+            content: "",
+            sources: [],
+            closed: false,
+            animate: true,
+            pending: false,
+            velaAgent: true,
+            agentTimeline: createAgentTimelineState(),
+          };
+    const timeline = applyAgentEvent(
+      base.agentTimeline || createAgentTimelineState(),
+      hubEvent
+    );
+    if (
+      hubEvent?.type === "message.delta" ||
+      hubEvent?.type === "agent.completed"
+    ) {
+      base.content = timeline.message;
+    }
+    if (hubEvent?.type === "route.selected") {
+      base.velaRoute = hubEvent.payload;
+    }
+    const updated = {
+      ...base,
+      velaAgent: true,
+      agentTimeline: timeline,
+      agentEvents: timeline.events,
+      reasoning: timeline.reasoning,
+      content: timeline.message || base.content || "",
+    };
+    if (chatIdx !== -1) {
+      _chatHistory[chatIdx] = updated;
+    } else {
+      _chatHistory.push(updated);
+    }
+    setChatHistory([..._chatHistory]);
   } else if (type === "agentThought") {
+    if (_chatHistory.some((chat) => chat.uuid === uuid && chat.velaAgent)) {
+      return;
+    }
     const thoughtText = thought || textResponse || "";
     const existingIdx = _chatHistory.findIndex(
       (chat) => chat.uuid === uuid && chat.type === "statusResponse"
@@ -129,6 +180,12 @@ export default function handleChat(
     type === "textResponseChunk" ||
     type === "finalizeResponseStream"
   ) {
+    if (
+      type === "textResponseChunk" &&
+      _chatHistory.some((chat) => chat.uuid === uuid && chat.velaAgent)
+    ) {
+      return;
+    }
     const chatIdx = _chatHistory.findIndex((chat) => chat.uuid === uuid);
     if (chatIdx !== -1) {
       const existingHistory = { ..._chatHistory[chatIdx] };

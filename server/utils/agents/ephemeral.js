@@ -21,6 +21,9 @@ const {
 } = require("../../models/workspaceAgentInvocation");
 
 /**
+ * Legacy AnythingLLM ephemeral agent handler (AIbitat + MCP).
+ * Vela-backed workspaces (chatProvider=vela-dispatch) must use velaAgentRuntime.js instead.
+ *
  * This is an instance and functional Agent handler, but it does not utilize
  * sessions or websocket's and is instead a singular one-off agent run that does
  * not persist between invocations
