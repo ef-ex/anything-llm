@@ -45,6 +45,7 @@ export default function PromptInput({
   centered = false,
   workspaceSlug = null,
   threadSlug = null,
+  hideStudioCodeRolePicker = false,
 }) {
   const { t } = useTranslation();
   const { showAgentCommand = true } = workspace ?? {};
@@ -375,10 +376,13 @@ export default function PromptInput({
               <div className="flex justify-between items-center pt-3.5 pb-3">
                 <div className="flex items-center gap-x-0.25">
                   <div className="flex items-center gap-x-1">
-                    <StudioCodeRoleSelect
-                      workspaceSlug={effectiveWorkspaceSlug}
-                      projectId={workspace?.velaProjectId}
-                    />
+                    {!hideStudioCodeRolePicker ? (
+                      <StudioCodeRoleSelect
+                        workspaceSlug={effectiveWorkspaceSlug}
+                        projectId={workspace?.velaProjectId}
+                        threadSlug={threadSlug}
+                      />
+                    ) : null}
                     {studioCode && studioCtx?.onNewAgent && (
                       <button
                         type="button"

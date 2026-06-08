@@ -3,7 +3,7 @@ import { baseHeaders, safeJsonParse } from "@/utils/request";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import WorkspaceThread from "@/models/workspaceThread";
 import { v4 } from "uuid";
-import { ABORT_STREAM_EVENT } from "@/utils/chat";
+import { ABORT_STREAM_EVENT, isStreamTerminalChunk } from "@/utils/chat";
 
 const Workspace = {
   workspaceOrderStorageKey: "anythingllm-workspace-order",
@@ -125,22 +125,32 @@ const Workspace = {
     prompt,
     chatHandler,
     attachments = [],
+    roleId = null,
+    studioCodeAgent = true,
   }) {
     if (!!threadSlug)
       return this.threads.streamChat(
         { workspaceSlug, threadSlug },
         prompt,
         chatHandler,
-        attachments
+        attachments,
+        { roleId, studioCodeAgent }
       );
     return this.streamChat(
       { slug: workspaceSlug },
       prompt,
       chatHandler,
-      attachments
+      attachments,
+      { roleId, studioCodeAgent }
     );
   },
-  streamChat: async function ({ slug }, message, handleChat, attachments = []) {
+  streamChat: async function (
+    { slug },
+    message,
+    handleChat,
+    attachments = [],
+    { roleId = null, studioCodeAgent = true } = {}
+  ) {
     const ctrl = new AbortController();
 
     // Listen for the ABORT_STREAM_EVENT key to be emitted by the client
@@ -152,9 +162,16 @@ const Workspace = {
       handleChat({ id: v4(), type: "stopGeneration" });
     });
 
+    let streamSettled = false;
+
     await fetchEventSource(`${API_BASE}/workspace/${slug}/stream-chat`, {
       method: "POST",
-      body: JSON.stringify({ message, attachments }),
+      body: JSON.stringify({
+        message,
+        attachments,
+        role_id: roleId || undefined,
+        studio_code_agent: studioCodeAgent,
+      }),
       headers: baseHeaders(),
       signal: ctrl.signal,
       openWhenHidden: true,
@@ -191,9 +208,13 @@ const Workspace = {
       },
       async onmessage(msg) {
         const chatResult = safeJsonParse(msg.data, null);
-        if (chatResult) handleChat(chatResult);
+        if (chatResult) {
+          if (isStreamTerminalChunk(chatResult)) streamSettled = true;
+          handleChat(chatResult);
+        }
       },
       onerror(err) {
+        if (streamSettled) return;
         handleChat({
           id: v4(),
           type: "abort",

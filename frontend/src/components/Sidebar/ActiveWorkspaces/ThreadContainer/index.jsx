@@ -4,7 +4,7 @@ import showToast from "@/utils/toast";
 import { Plus, CircleNotch, Trash } from "@phosphor-icons/react";
 import { useEffect, useState, useCallback } from "react";
 import ThreadItem from "./ThreadItem";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   isWorkerThreadSlug,
   repairWorkerThreadParentsAsync,
@@ -12,7 +12,10 @@ import {
   VELA_WORKER_THREAD_EVENT,
 } from "@/utils/orchestratorRuns";
 import { isStudioCodeEmbed, studioCodeThreadPath } from "@/utils/studioCodeRole";
-import { MAX_STUDIO_CODE_SPLIT_PANES } from "@/utils/studioCodeSplit";
+import {
+  MAX_STUDIO_CODE_SPLIT_PANES,
+  pruneSplitThreadSlugs,
+} from "@/utils/studioCodeSplit";
 import {
   useStudioCodeContext,
   useStudioCodeContextRefreshListener,
@@ -26,6 +29,7 @@ export default function ThreadContainer({
   onSplitToggle = null,
 }) {
   const { threadSlug = null } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const studioCode = isStudioCodeEmbed(searchParams);
   const studioCtx = useStudioCodeContext();
@@ -138,23 +142,36 @@ export default function ThreadContainer({
     await Workspace.threads.deleteBulk(workspace.slug, slugs);
     setThreads((prev) => prev.filter((t) => !t.deleted));
 
+    if (studioCode) {
+      const remaining = threads
+        .filter((t) => !t.deleted && !slugs.includes(t.slug))
+        .map((t) => t.slug);
+      pruneSplitThreadSlugs(workspace.slug, remaining);
+      studioCtx?.refreshSplitSlugs?.();
+    }
+
     if (slugs.includes(threadSlug)) {
       const remaining = threads.filter(
         (t) => !t.deleted && !slugs.includes(t.slug)
       );
       if (remaining.length > 0) {
-        window.location.href = studioCodeThreadPath(
-          workspace.slug,
-          remaining[0].slug
-        );
+        const nextPath = studioCode
+          ? studioCodeThreadPath(workspace.slug, remaining[0].slug)
+          : paths.workspace.thread(workspace.slug, remaining[0].slug);
+        navigate(nextPath, { replace: true });
         return;
       }
       const { thread, error } = await Workspace.threads.new(workspace.slug);
       if (thread) {
-        window.location.href = studioCodeThreadPath(workspace.slug, thread.slug);
+        const nextPath = studioCode
+          ? studioCodeThreadPath(workspace.slug, thread.slug)
+          : paths.workspace.thread(workspace.slug, thread.slug);
+        navigate(nextPath, { replace: true });
       } else {
         console.warn("[vela] thread recreate after delete failed:", error);
-        window.location.href = paths.home();
+        navigate(studioCode ? studioCodeThreadPath(workspace.slug) : paths.home(), {
+          replace: true,
+        });
       }
     }
   };

@@ -5,6 +5,11 @@ import Workspace from "@/models/workspace";
 import { useStudioCodeContext } from "@/contexts/StudioCodeContext";
 import { contextFillBorderClass } from "@/utils/studioCodeContext";
 import { MAX_STUDIO_CODE_SPLIT_PANES, studioCodeSplitGridStyle } from "@/utils/studioCodeSplit";
+import {
+  isStudioAssistantThreadRole,
+  resolveStoredRoleId,
+} from "@/utils/studioCodeRole";
+import Vela from "@/models/vela";
 
 /**
  * Multi-session split grid for Studio Code (M49.5 PR3).
@@ -20,6 +25,36 @@ export default function StudioCodeSplitLayout({
   const studioCtx = useStudioCodeContext();
   const [historiesBySlug, setHistoriesBySlug] = useState({});
   const [threadNames, setThreadNames] = useState({});
+  const [roleNamesById, setRoleNamesById] = useState({});
+  const [codeRoles, setCodeRoles] = useState([]);
+  const [codeRolesDefaultId, setCodeRolesDefaultId] = useState("");
+  const [assistantRoleId, setAssistantRoleId] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!workspace?.slug || !workspace?.velaProjectId) return;
+      try {
+        const data = await Vela.listStudioCodeRoles(workspace.slug, {
+          projectId: workspace.velaProjectId,
+        });
+        if (cancelled) return;
+        const map = {};
+        for (const role of data?.roles || []) {
+          if (role?.id) map[role.id] = role.display_name || role.id;
+        }
+        setRoleNamesById(map);
+        setCodeRoles(data?.roles || []);
+        setCodeRolesDefaultId(data?.default_role_id || "");
+        setAssistantRoleId(data?.assistant_role_id || "");
+      } catch {
+        /* optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace?.slug, workspace?.velaProjectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,9 +106,21 @@ export default function StudioCodeSplitLayout({
         </p>
       )}
       <div className="flex-1 min-h-0 grid gap-2 p-2" style={gridStyle}>
-        {paneThreadSlugs.map((threadSlug) => {
+        {paneThreadSlugs.map((threadSlug, paneIndex) => {
           const isActiveInput = threadSlug === activeInputThreadSlug;
           const label = threadNames[threadSlug] || threadSlug;
+          const roleId = resolveStoredRoleId(
+            workspace.slug,
+            codeRoles,
+            codeRolesDefaultId,
+            threadSlug,
+            {
+              assistantRoleId,
+              splitPaneIndex: paneIndex,
+              splitPaneCount: paneThreadSlugs.length,
+            }
+          );
+          const roleLabel = roleNamesById[roleId] || "";
           const contextBorder =
             studioCtx?.enabled
               ? contextFillBorderClass(studioCtx.getFill(threadSlug).level)
@@ -97,6 +144,12 @@ export default function StudioCodeSplitLayout({
               >
                 <span className="text-xs text-white light:text-slate-800 truncate flex-1">
                   {label}
+                  {roleLabel ? (
+                    <span className="text-zinc-400 light:text-slate-500 font-normal">
+                      {" "}
+                      · {roleLabel}
+                    </span>
+                  ) : null}
                 </span>
                 {isActiveInput ? (
                   <span className="text-[10px] text-primary-button shrink-0 ml-2">
@@ -121,6 +174,11 @@ export default function StudioCodeSplitLayout({
                   embedded
                   hideContextHeader
                   showPromptInput={isActiveInput}
+                  studioCodeResolvedRoleId={roleId}
+                  hideStudioCodeRolePicker={isStudioAssistantThreadRole(roleId)}
+                  studioCodeSplitPaneIndex={paneIndex}
+                  studioCodeSplitPaneCount={paneThreadSlugs.length}
+                  studioCodeAssistantRoleId={assistantRoleId}
                 />
               </div>
             </div>

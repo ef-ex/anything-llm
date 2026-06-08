@@ -1426,7 +1426,10 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
             this.handlerProps?.invocation?.workspace ??
             null,
           userId:
-            config.userId ?? this.handlerProps?.invocation?.userId ?? null,
+            config.userId ??
+            this.handlerProps?.invocation?.hubUserId ??
+            this.handlerProps?.invocation?.userId ??
+            null,
           model: config.model,
         });
       default:

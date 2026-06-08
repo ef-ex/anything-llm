@@ -1,4 +1,4 @@
-import { ABORT_STREAM_EVENT } from "@/utils/chat";
+import { ABORT_STREAM_EVENT, isStreamTerminalChunk } from "@/utils/chat";
 import { API_BASE } from "@/utils/constants";
 import { baseHeaders, safeJsonParse } from "@/utils/request";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
@@ -91,7 +91,8 @@ const WorkspaceThread = {
     { workspaceSlug, threadSlug },
     message,
     handleChat,
-    attachments = []
+    attachments = [],
+    { roleId = null, studioCodeAgent = true } = {}
   ) {
     const ctrl = new AbortController();
 
@@ -104,11 +105,18 @@ const WorkspaceThread = {
       handleChat({ id: v4(), type: "stopGeneration" });
     });
 
+    let streamSettled = false;
+
     await fetchEventSource(
       `${API_BASE}/workspace/${workspaceSlug}/thread/${threadSlug}/stream-chat`,
       {
         method: "POST",
-        body: JSON.stringify({ message, attachments }),
+        body: JSON.stringify({
+          message,
+          attachments,
+          role_id: roleId || undefined,
+          studio_code_agent: studioCodeAgent,
+        }),
         headers: baseHeaders(),
         signal: ctrl.signal,
         openWhenHidden: true,
@@ -145,9 +153,13 @@ const WorkspaceThread = {
         },
         async onmessage(msg) {
           const chatResult = safeJsonParse(msg.data, null);
-          if (chatResult) handleChat(chatResult);
+          if (chatResult) {
+            if (isStreamTerminalChunk(chatResult)) streamSettled = true;
+            handleChat(chatResult);
+          }
         },
         onerror(err) {
+          if (streamSettled) return;
           handleChat({
             id: v4(),
             type: "abort",

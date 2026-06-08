@@ -18,6 +18,7 @@ import {
 import { isWorkerThreadSlug } from "@/utils/orchestratorRuns";
 import {
   loadSplitThreadSlugs,
+  pruneSplitThreadSlugs,
   resolveStudioCodeSplitDisplay,
   toggleSplitThreadSlug,
 } from "@/utils/studioCodeSplit";
@@ -85,12 +86,43 @@ function StudioCodeEmbedChat() {
   const navigate = useNavigate();
   const [workspace, setWorkspace] = useState(null);
   const [loadedSlug, setLoadedSlug] = useState(null);
-  const [splitSlugs, setSplitSlugs] = useState(() => loadSplitThreadSlugs(slug));
+  const [splitSlugs, setSplitSlugs] = useState([]);
+  const [validThreadSlugs, setValidThreadSlugs] = useState([]);
   const [activeInputSlug, setActiveInputSlug] = useState(threadSlug || null);
   const ensuringThreadRef = useRef(false);
 
+  const syncThreadSlugsWithServer = useCallback(
+    async ({ redirectStaleRoute = true } = {}) => {
+      if (!workspace?.slug) return;
+      const { threads } = await Workspace.threads.all(workspace.slug);
+      const mainThreads = (threads || []).filter(
+        (t) => t?.slug && !isWorkerThreadSlug(workspace.slug, t.slug)
+      );
+      const validSlugs = mainThreads.map((t) => t.slug);
+      setValidThreadSlugs(validSlugs);
+      const pruned = pruneSplitThreadSlugs(workspace.slug, validSlugs);
+      setSplitSlugs(pruned);
+
+      if (redirectStaleRoute && threadSlug && !validSlugs.includes(threadSlug)) {
+        const fallback = validSlugs[0];
+        navigate(
+          fallback
+            ? studioCodeThreadPath(workspace.slug, fallback)
+            : studioCodeThreadPath(workspace.slug),
+          { replace: true }
+        );
+      }
+    },
+    [workspace?.slug, threadSlug, navigate]
+  );
+
+  const refreshSplitSlugs = useCallback(() => {
+    void syncThreadSlugsWithServer({ redirectStaleRoute: false });
+  }, [syncThreadSlugsWithServer]);
+
   useEffect(() => {
-    setSplitSlugs(loadSplitThreadSlugs(slug));
+    setSplitSlugs([]);
+    setValidThreadSlugs([]);
   }, [slug]);
 
   useEffect(() => {
@@ -115,9 +147,19 @@ function StudioCodeEmbedChat() {
     if (threadSlug) setActiveInputSlug(threadSlug);
   }, [threadSlug]);
 
+  useEffect(() => {
+    void syncThreadSlugsWithServer();
+  }, [syncThreadSlugsWithServer]);
+
+  const displaySplitSlugs = useMemo(() => {
+    const valid = new Set(validThreadSlugs);
+    if (valid.size === 0) return splitSlugs;
+    return splitSlugs.filter((s) => valid.has(s));
+  }, [splitSlugs, validThreadSlugs]);
+
   const { panes, overflowCount, splitActive } = useMemo(
-    () => resolveStudioCodeSplitDisplay(splitSlugs, threadSlug),
-    [splitSlugs, threadSlug]
+    () => resolveStudioCodeSplitDisplay(displaySplitSlugs, threadSlug),
+    [displaySplitSlugs, threadSlug]
   );
 
   const useSplitGrid = splitActive && panes.length > 1;
@@ -218,11 +260,15 @@ function StudioCodeEmbedChat() {
   const orchestratorThreadSlug = activeInputSlug || threadSlug;
 
   return (
-    <StudioCodeContextProvider workspace={workspace} onNewAgent={handleNewAgent}>
+    <StudioCodeContextProvider
+      workspace={workspace}
+      onNewAgent={handleNewAgent}
+      refreshSplitSlugs={refreshSplitSlugs}
+    >
       <div className="w-screen h-[100dvh] overflow-hidden bg-zinc-950 light:bg-slate-50 flex flex-col md:flex-row">
         <AgentsSidebar
           workspace={workspace}
-          splitThreadSlugs={splitSlugs}
+          splitThreadSlugs={displaySplitSlugs}
           onSplitToggle={handleSplitToggle}
         />
         <main className="flex-1 min-w-0 h-full">

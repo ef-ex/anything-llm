@@ -24,6 +24,12 @@ async function* normalizeOpenAiStreamDeltas(stream) {
     const choice = chunk?.choices?.[0];
     let deltaText = choice?.delta?.content;
     if (typeof deltaText !== "string" || deltaText.length === 0) {
+      const messageContent = choice?.message?.content;
+      if (typeof messageContent === "string" && messageContent.length > 0) {
+        deltaText = messageContent;
+      }
+    }
+    if (typeof deltaText !== "string" || deltaText.length === 0) {
       yield chunk;
       continue;
     }
@@ -250,6 +256,19 @@ class VelaLLMConnector {
     return timing;
   }
 
+  #dispatchMetadataFromHeaders(headers) {
+    const timing = this.#dispatchTimingFromHeaders(headers);
+    const providerId =
+      headers?.get?.("x-vela-provider-id") ?? headers?.["x-vela-provider-id"];
+    const modelId =
+      headers?.get?.("x-vela-model-id") ?? headers?.["x-vela-model-id"];
+    return {
+      ...timing,
+      ...(providerId ? { provider_id: providerId } : {}),
+      ...(modelId ? { model_id: modelId } : {}),
+    };
+  }
+
   async #velaFetch(path, body, { stream = false } = {}) {
     const url = `${VELA_API_URL}/api/${path.replace(/^\//, "")}`;
     const controller = new AbortController();
@@ -332,7 +351,7 @@ class VelaLLMConnector {
       throw new Error(await this.#parseDispatchError(resp));
     }
 
-    const dispatchTiming = this.#dispatchTimingFromHeaders(resp.headers);
+    const dispatchMetadata = this.#dispatchMetadataFromHeaders(resp.headers);
     const rawStream = {
       [Symbol.asyncIterator]() {
         return parseOpenAiSseStream(resp.body);
@@ -342,7 +361,7 @@ class VelaLLMConnector {
       [Symbol.asyncIterator]() {
         return normalizeOpenAiStreamDeltas(rawStream);
       },
-      metadata: dispatchTiming,
+      metadata: dispatchMetadata,
     };
 
     return LLMPerformanceMonitor.measureStream({
@@ -362,6 +381,12 @@ class VelaLLMConnector {
         vela_context_ms: stream.metadata.context_ms,
         vela_provider_ttfb_ms: stream.metadata.provider_ttfb_ms,
         vela_total_ms: stream.metadata.total_ms,
+        ...(stream.metadata.model_id
+          ? { model: stream.metadata.model_id }
+          : {}),
+        ...(stream.metadata.provider_id
+          ? { vela_provider_id: stream.metadata.provider_id }
+          : {}),
       });
     }
     return result;

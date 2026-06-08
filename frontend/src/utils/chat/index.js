@@ -12,7 +12,8 @@ export default function handleChat(
   setWebsocket
 ) {
   const {
-    uuid,
+    uuid: rawUuid,
+    id: streamId,
     textResponse,
     type,
     sources = [],
@@ -23,7 +24,9 @@ export default function handleChat(
     action = null,
     metrics = {},
     routedTo = null,
+    thought = null,
   } = chatResult;
+  const uuid = rawUuid || streamId;
 
   if (type === "modelRouteNotification") {
     _chatHistory.push({
@@ -95,6 +98,33 @@ export default function handleChat(
       metrics,
     });
     emitAssistantMessageCompleteEvent(chatId);
+  } else if (type === "agentThought") {
+    const thoughtText = thought || textResponse || "";
+    const existingIdx = _chatHistory.findIndex(
+      (chat) => chat.uuid === uuid && chat.type === "statusResponse"
+    );
+    if (existingIdx !== -1) {
+      _chatHistory[existingIdx] = {
+        ..._chatHistory[existingIdx],
+        content: thoughtText,
+        animate: animate !== false,
+        pending: false,
+      };
+    } else {
+      _chatHistory.push({
+        uuid,
+        type: "statusResponse",
+        content: thoughtText,
+        role: "assistant",
+        sources: [],
+        closed: false,
+        error: null,
+        animate: animate !== false,
+        pending: false,
+        metrics,
+      });
+    }
+    setChatHistory([..._chatHistory]);
   } else if (
     type === "textResponseChunk" ||
     type === "finalizeResponseStream"
@@ -147,6 +177,9 @@ export default function handleChat(
         chatId,
         metrics,
       });
+      if (type === "finalizeResponseStream") {
+        setLoadingResponse(false);
+      }
     }
     setChatHistory([..._chatHistory]);
   } else if (type === "agentInitWebsocketConnection") {
@@ -186,6 +219,15 @@ export default function handleChat(
       );
     }
   }
+}
+
+export function isStreamTerminalChunk(chatResult) {
+  if (!chatResult?.type) return false;
+  return (
+    chatResult.type === "finalizeResponseStream" ||
+    chatResult.type === "abort" ||
+    (chatResult.type === "textResponse" && chatResult.close)
+  );
 }
 
 export function getWorkspaceSystemPrompt(workspace) {

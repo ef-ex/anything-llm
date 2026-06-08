@@ -13,10 +13,49 @@ const VELA_ORCHESTRATOR_TIMEOUT_MS = parseInt(
   10
 );
 
+/**
+ * @param {unknown} detail
+ * @returns {string}
+ */
+function formatVelaErrorDetail(detail) {
+  if (detail == null) return "";
+  if (typeof detail === "string") return detail;
+  if (typeof detail !== "object") return String(detail);
+  const body = /** @type {Record<string, unknown>} */ (detail);
+  if (typeof body.error === "string" && body.error.trim()) return body.error;
+  if (typeof body.message === "string" && body.message.trim()) return body.message;
+  const category =
+    typeof body.category === "string" && body.category.trim()
+      ? body.category
+      : null;
+  const metadata =
+    body.metadata && typeof body.metadata === "object"
+      ? /** @type {Record<string, unknown>} */ (body.metadata)
+      : null;
+  if (metadata) {
+    const providerId =
+      typeof metadata.provider_id === "string" ? metadata.provider_id : null;
+    const modelId =
+      typeof metadata.model_id === "string" ? metadata.model_id : null;
+    if (providerId && modelId) {
+      const prefix = category ? `${category}: ` : "";
+      return `${prefix}${providerId}/${modelId}`;
+    }
+  }
+  try {
+    return JSON.stringify(body);
+  } catch {
+    return "unknown error";
+  }
+}
+
 function timeoutMsForPath(path, overrideMs) {
   if (overrideMs != null) return overrideMs;
   const normalized = String(path || "").replace(/^\//, "");
-  if (normalized.startsWith("orchestrator/")) {
+  if (
+    normalized.startsWith("orchestrator/") ||
+    normalized.startsWith("orchestration/")
+  ) {
     return VELA_ORCHESTRATOR_TIMEOUT_MS;
   }
   return VELA_TIMEOUT_MS;
@@ -72,11 +111,16 @@ async function velaApiRequest(path, opts = {}) {
     }
 
     if (!resp.ok) {
-      const detail =
+      const rawDetail =
         data && typeof data === "object" && data.detail
           ? data.detail
           : `HTTP ${resp.status}`;
-      return { ok: false, status: resp.status, error: String(detail), data };
+      return {
+        ok: false,
+        status: resp.status,
+        error: formatVelaErrorDetail(rawDetail),
+        data,
+      };
     }
 
     return { ok: true, status: resp.status, data };
@@ -117,10 +161,23 @@ function velaUserId(user) {
   return "anonymous";
 }
 
+/**
+ * AnythingLLM Prisma user ids are integers — Hub user ids (e.g. admin-user) are not.
+ * @param {unknown} value
+ * @returns {number|null}
+ */
+function parsePrismaUserId(value) {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 module.exports = {
   VELA_TIMEOUT_MS,
   VELA_ORCHESTRATOR_TIMEOUT_MS,
+  formatVelaErrorDetail,
   velaApiRequest,
   sendVelaResult,
   velaUserId,
+  parsePrismaUserId,
 };

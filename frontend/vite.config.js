@@ -32,6 +32,9 @@ export default defineConfig(({ mode }) => {
         "/studio.css": { target: velaHub, changeOrigin: true },
         "/styles.css": { target: velaHub, changeOrigin: true },
         "/js/studio": { target: velaHub, changeOrigin: true },
+        // Shared Hub modules imported by studio/ui-helpers.js (../ui-helpers.js).
+        "/js/ui-helpers.js": { target: velaHub, changeOrigin: true },
+        "/js/help-copy.js": { target: velaHub, changeOrigin: true },
       },
     },
     define: {

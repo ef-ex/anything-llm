@@ -1,23 +1,11 @@
 const { v4: uuidv4 } = require("uuid");
-const {
-  EphemeralAgentHandler,
-  EphemeralEventListener,
-} = require("./agents/ephemeral");
 const { WorkspaceThread } = require("../models/workspaceThread");
-const {
-  ensureVelaStudioMcpConfig,
-  MCP_SERVER_NAME,
-} = require("./velaStudioMcp");
+const { STUDIO_ASSISTANT_ROLE_ID } = require("./velaCodeWorkspace");
+const { streamCodeAgent } = require("./velaCodeAgent");
 
 /**
- * Stream Studio Assistant agent loop (AIbitat + vela-studio MCP) over HTTP SSE.
+ * Studio Ask panel — always uses Hub role studio-assistant (no Code role picker).
  * @param {object} params
- * @param {import("express").Response} params.response
- * @param {object} params.workspace
- * @param {string} params.message
- * @param {string|null} params.userId
- * @param {string|null} params.threadSlug
- * @param {Array} params.attachments
  */
 async function streamStudioAssistant({
   response,
@@ -27,42 +15,31 @@ async function streamStudioAssistant({
   threadSlug = null,
   attachments = [],
 }) {
-  ensureVelaStudioMcpConfig();
-
-  const uuid = uuidv4();
   let thread = null;
-  if (threadSlug) {
+  if (threadSlug && workspace?.id) {
     thread = await WorkspaceThread.get({
       slug: threadSlug,
       workspace_id: workspace.id,
     });
   }
 
-  const agentHandler = new EphemeralAgentHandler({
-    uuid,
+  await streamCodeAgent({
+    response,
     workspace,
-    prompt: message,
-    userId,
-    threadId: thread?.id ?? null,
-    sessionId: null,
+    message,
+    user: null,
+    thread,
     attachments,
+    uuid: uuidv4(),
+    options: {
+      roleId: STUDIO_ASSISTANT_ROLE_ID,
+      studioCodeAgent: true,
+      hubUserId:
+        userId != null && String(userId).trim() ? String(userId).trim() : null,
+    },
   });
-
-  const eventListener = new EphemeralEventListener();
-  await agentHandler.init();
-  await agentHandler.createAIbitat({
-    handler: eventListener,
-    toolOverrides: [`@@mcp_${MCP_SERVER_NAME}`],
-  });
-
-  response.setHeader("Content-Type", "text/event-stream");
-  response.setHeader("Cache-Control", "no-cache");
-  response.setHeader("Connection", "keep-alive");
-  response.flushHeaders?.();
-
-  agentHandler.startAgentCluster();
-
-  return eventListener.streamAgentEvents(response, uuid);
 }
 
-module.exports = { streamStudioAssistant };
+module.exports = {
+  streamStudioAssistant,
+};

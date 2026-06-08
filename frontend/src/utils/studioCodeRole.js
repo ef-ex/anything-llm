@@ -4,9 +4,10 @@ import Workspace from "@/models/workspace";
 import paths from "@/utils/paths";
 import { saveSplitThreadSlugs } from "@/utils/studioCodeSplit";
 
-export const DEFAULT_STUDIO_CODE_ROLE_ID = "code-maintainer";
-
 const STORAGE_PREFIX = "vela-studio-code-role";
+
+/** Hub bundled role for Studio Ask / assistant split pane (not chosen via picker). */
+export const STUDIO_ASSISTANT_ROLE_ID = "studio-assistant";
 
 export function isStudioCodeEmbed(searchParams) {
   return searchParams?.get("studio") === "code";
@@ -25,10 +26,21 @@ export function studioCodeThreadPath(workspaceSlug, threadSlug = null) {
   return paths.studioCodeEmbed.chat(workspaceSlug);
 }
 
-export function loadStudioCodeRole(workspaceSlug, defaultRoleId = DEFAULT_STUDIO_CODE_ROLE_ID) {
+function storageKey(workspaceSlug, threadSlug = null) {
+  if (threadSlug) return `${STORAGE_PREFIX}:${workspaceSlug}:${threadSlug}`;
+  return `${STORAGE_PREFIX}:${workspaceSlug}`;
+}
+
+export function loadStudioCodeRole(workspaceSlug, threadSlug = null, defaultRoleId = "") {
   if (!workspaceSlug) return defaultRoleId;
   try {
-    const raw = localStorage.getItem(`${STORAGE_PREFIX}:${workspaceSlug}`);
+    if (threadSlug) {
+      const perThread = localStorage.getItem(storageKey(workspaceSlug, threadSlug));
+      if (perThread && typeof perThread === "string" && perThread.trim()) {
+        return perThread.trim();
+      }
+    }
+    const raw = localStorage.getItem(storageKey(workspaceSlug));
     if (raw && typeof raw === "string" && raw.trim()) return raw.trim();
   } catch {
     /* ignore */
@@ -36,20 +48,35 @@ export function loadStudioCodeRole(workspaceSlug, defaultRoleId = DEFAULT_STUDIO
   return defaultRoleId;
 }
 
-export function saveStudioCodeRole(workspaceSlug, roleId) {
+export function saveStudioCodeRole(workspaceSlug, roleId, threadSlug = null) {
   if (!workspaceSlug || !roleId) return;
   try {
-    localStorage.setItem(`${STORAGE_PREFIX}:${workspaceSlug}`, roleId);
+    localStorage.setItem(storageKey(workspaceSlug, threadSlug), roleId);
+    if (!threadSlug) {
+      localStorage.setItem(storageKey(workspaceSlug), roleId);
+    }
   } catch {
     /* quota */
+  }
+}
+
+function clearStudioCodeRoleStorage(workspaceSlug, threadSlug = null) {
+  if (!workspaceSlug) return;
+  try {
+    if (threadSlug) {
+      localStorage.removeItem(storageKey(workspaceSlug, threadSlug));
+    } else {
+      localStorage.removeItem(storageKey(workspaceSlug));
+    }
+  } catch {
+    /* ignore */
   }
 }
 
 export function pickDefaultRoleId(roles, serverDefaultId) {
   const ids = new Set((roles || []).map((r) => r.id));
   if (serverDefaultId && ids.has(serverDefaultId)) return serverDefaultId;
-  if (ids.has(DEFAULT_STUDIO_CODE_ROLE_ID)) return DEFAULT_STUDIO_CODE_ROLE_ID;
-  return roles?.[0]?.id || DEFAULT_STUDIO_CODE_ROLE_ID;
+  return roles?.[0]?.id || "";
 }
 
 /**
@@ -79,10 +106,46 @@ export async function activateNewStudioCodeAgent({
   return thread;
 }
 
-export function resolveStoredRoleId(workspaceSlug, roles, serverDefaultId) {
-  const fallback = pickDefaultRoleId(roles, serverDefaultId);
-  const stored = loadStudioCodeRole(workspaceSlug, fallback);
+export function resolveStoredRoleId(
+  workspaceSlug,
+  roles,
+  serverDefaultId,
+  threadSlug = null,
+  { assistantRoleId = null, splitPaneIndex = null, splitPaneCount = 0 } = {}
+) {
   const ids = new Set((roles || []).map((r) => r.id));
-  if (ids.has(stored)) return stored;
+  const hubAssistantId =
+    assistantRoleId && ids.has(assistantRoleId)
+      ? assistantRoleId
+      : ids.has(STUDIO_ASSISTANT_ROLE_ID)
+        ? STUDIO_ASSISTANT_ROLE_ID
+        : null;
+  const fallback = pickDefaultRoleId(roles, serverDefaultId);
+
+  if (threadSlug) {
+    const perThread = loadStudioCodeRole(workspaceSlug, threadSlug, "");
+    if (perThread && ids.has(perThread)) return perThread;
+    if (perThread) clearStudioCodeRoleStorage(workspaceSlug, threadSlug);
+  }
+
+  const workspaceLevel = loadStudioCodeRole(workspaceSlug, null, "");
+  if (workspaceLevel && ids.has(workspaceLevel)) return workspaceLevel;
+  if (workspaceLevel) clearStudioCodeRoleStorage(workspaceSlug, null);
+
+  // Split assistant pane (no role picker): first pane defaults to studio-assistant.
+  if (
+    hubAssistantId &&
+    splitPaneCount > 1 &&
+    splitPaneIndex === 0 &&
+    threadSlug
+  ) {
+    return hubAssistantId;
+  }
+
   return fallback;
+}
+
+/** True when this thread is pinned to the Hub assistant role (hide role picker). */
+export function isStudioAssistantThreadRole(roleId) {
+  return roleId === STUDIO_ASSISTANT_ROLE_ID;
 }

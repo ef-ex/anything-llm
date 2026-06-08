@@ -44,9 +44,10 @@ async function grepAgents({
   thread = null,
   attachments = [],
 }) {
-  // Vela dispatch uses standard chat except Studio Assistant (M57 agent loop + MCP).
+  // Vela dispatch: Studio Assistant and Code agents use dedicated HTTP agent streams
+  // (assistant-stream / streamCodeAgent). Block legacy websocket @agent path here.
   if (workspace?.chatProvider === "vela-dispatch") {
-    return workspace?.velaRolePresetId === "studio-assistant";
+    return false;
   }
 
   let nativeToolingEnabled = false;

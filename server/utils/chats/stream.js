@@ -6,6 +6,10 @@ const { getVectorDbClass, resolveProviderConnector } = require("../helpers");
 const { writeResponseChunk } = require("../helpers/chat/responses");
 const { grepAgents } = require("./agents");
 const {
+  shouldUseCodeAgentLoop,
+  streamCodeAgent,
+} = require("../velaCodeAgent");
+const {
   isVelaDispatchFastPath,
   shouldIncludePinnedOnFastPath,
   emptyVectorSearchResult,
@@ -27,7 +31,8 @@ async function streamChatWithWorkspace(
   chatMode = "automatic",
   user = null,
   thread = null,
-  attachments = []
+  attachments = [],
+  streamOptions = {}
 ) {
   const uuid = uuidv4();
   const updatedMessage = await grepCommand(message, user);
@@ -55,6 +60,20 @@ async function streamChatWithWorkspace(
     attachments,
   });
   if (isAgentChat) return;
+
+  if (shouldUseCodeAgentLoop(workspace, streamOptions)) {
+    await streamCodeAgent({
+      response,
+      workspace,
+      message: updatedMessage,
+      user,
+      thread,
+      attachments,
+      uuid,
+      options: streamOptions,
+    });
+    return;
+  }
 
   const {
     connector: LLMConnector,

@@ -1,4 +1,8 @@
-const { velaApiRequest, velaUserId } = require("../../utils/velaApi");
+const {
+  velaApiRequest,
+  velaUserId,
+  parsePrismaUserId,
+} = require("../../utils/velaApi");
 
 describe("velaApi", () => {
   const originalUrl = process.env.VELA_API_URL;
@@ -11,6 +15,13 @@ describe("velaApi", () => {
   test("velaUserId returns string id or anonymous", () => {
     expect(velaUserId({ id: 42 })).toBe("42");
     expect(velaUserId(null)).toBe("anonymous");
+  });
+
+  test("parsePrismaUserId accepts positive integers only", () => {
+    expect(parsePrismaUserId(42)).toBe(42);
+    expect(parsePrismaUserId("7")).toBe(7);
+    expect(parsePrismaUserId("admin-user")).toBeNull();
+    expect(parsePrismaUserId(null)).toBeNull();
   });
 
   test("velaApiRequest returns 503 when VELA_API_URL unset", async () => {

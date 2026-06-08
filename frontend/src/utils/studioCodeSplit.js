@@ -37,6 +37,24 @@ export function saveSplitThreadSlugs(workspaceSlug, slugs) {
   }
 }
 
+/** Drop split-pane slugs that no longer exist on the server. */
+export function pruneSplitThreadSlugs(workspaceSlug, validSlugs) {
+  const valid = new Set((validSlugs || []).filter(Boolean));
+  const current = loadSplitThreadSlugs(workspaceSlug);
+  const pruned = current.filter((slug) => valid.has(slug));
+  if (pruned.length !== current.length) {
+    saveSplitThreadSlugs(workspaceSlug, pruned);
+  }
+  return pruned;
+}
+
+export function removeSplitThreadSlug(workspaceSlug, threadSlug) {
+  if (!workspaceSlug || !threadSlug) return loadSplitThreadSlugs(workspaceSlug);
+  const next = loadSplitThreadSlugs(workspaceSlug).filter((s) => s !== threadSlug);
+  saveSplitThreadSlugs(workspaceSlug, next);
+  return next;
+}
+
 /**
  * @returns {{ panes: string[], overflowCount: number, splitActive: boolean }}
  */

@@ -285,6 +285,14 @@ class AgentHandler {
         if (!process.env.CEREBRAS_API_KEY)
           throw new Error("Cerebras API key must be provided to use agents.");
         break;
+      case "vela-dispatch": {
+        const { VELA_API_URL } = require("../velaContext");
+        if (!VELA_API_URL)
+          throw new Error(
+            "Vela Hub is not configured (VELA_API_URL). Start the dev stack to use Code agents."
+          );
+        break;
+      }
       default:
         throw new Error(
           "No workspace agent provider set. Please set your agent provider in the workspace's settings"
@@ -379,6 +387,8 @@ class AgentHandler {
         return process.env.MINIMAX_MODEL_PREF ?? "MiniMax-M2.7";
       case "cerebras":
         return process.env.CEREBRAS_MODEL_PREF ?? "gpt-oss-120b";
+      case "vela-dispatch":
+        return this.invocation?.workspace?.chatModel || "vela-dispatch";
       default:
         return null;
     }
@@ -397,6 +407,13 @@ class AgentHandler {
     // Model is null here since the router determines it at resolve time.
     if (this.invocation.workspace.chatProvider === "anythingllm-router") {
       return { provider: "anythingllm-router", model: null };
+    }
+
+    if (this.invocation.workspace.chatProvider === "vela-dispatch") {
+      return {
+        provider: "vela-dispatch",
+        model: this.invocation.workspace.chatModel || null,
+      };
     }
 
     // First, fallback to the workspace chat provider and model if they exist

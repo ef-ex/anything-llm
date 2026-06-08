@@ -32,6 +32,7 @@ class EphemeralAgentHandler extends AgentHandler {
   #workspace = null;
   /** @type {import("@prisma/client").users["id"]|null} the user id to use for the agent */
   #userId = null;
+  #hubUserId = null;
   /** @type {import("@prisma/client").workspace_threads|null} the workspace thread id to use for the agent */
   #threadId = null;
   /** @type {string|null} the session id to use for the agent */
@@ -42,6 +43,8 @@ class EphemeralAgentHandler extends AgentHandler {
   #funcsToLoad = [];
   /** @type {Array<{name: string, mime: string, contentString: string}>} attachments for multimodal support */
   #attachments = [];
+  /** @type {string|null} Hub worker instructions — replaces generic workspace system prompt */
+  #agentRoleOverride = null;
 
   /** @type {AIbitat|null} */
   aibitat = null;
@@ -58,9 +61,11 @@ class EphemeralAgentHandler extends AgentHandler {
    * workspace: import("@prisma/client").workspaces|null,
    * prompt: string,
    * userId: import("@prisma/client").users["id"]|null,
+   * hubUserId?: string|null,
    * threadId: import("@prisma/client").workspace_threads["id"]|null,
    * sessionId: string|null,
    * attachments: Array<{name: string, mime: string, contentString: string}>
+   * agentRoleOverride?: string|null
    * }} parameters
    */
   constructor({
@@ -68,22 +73,34 @@ class EphemeralAgentHandler extends AgentHandler {
     workspace = null,
     prompt,
     userId = null,
+    hubUserId = null,
     threadId = null,
     sessionId = null,
     attachments = [],
+    agentRoleOverride = null,
   }) {
     super({ uuid });
     this.#invocationUUID = uuid;
     this.#workspace = workspace;
     this.#prompt = prompt;
 
+    const { parsePrismaUserId } = require("../velaApi");
+    const prismaUserId = parsePrismaUserId(userId);
     // Note: userId for ephemeral agent is only available
     // via the workspace-thread chat endpoints for the API
     // since workspaces can belong to multiple users.
-    this.#userId = userId;
+    this.#userId = prismaUserId != null ? String(prismaUserId) : null;
+    this.#hubUserId =
+      hubUserId != null && String(hubUserId).trim()
+        ? String(hubUserId).trim()
+        : this.#userId;
     this.#threadId = threadId;
     this.#sessionId = sessionId;
     this.#attachments = attachments;
+    this.#agentRoleOverride =
+      typeof agentRoleOverride === "string" && agentRoleOverride.trim()
+        ? agentRoleOverride.trim()
+        : null;
   }
 
   log(text, ...args) {
@@ -151,6 +168,16 @@ class EphemeralAgentHandler extends AgentHandler {
       return { provider: "anythingllm-router", model: null };
     }
 
+    if (this.#workspace?.chatProvider === "vela-dispatch") {
+      return {
+        provider: "vela-dispatch",
+        model:
+          this.#workspace?.agentModel ??
+          this.#workspace?.chatModel ??
+          null,
+      };
+    }
+
     // First, fallback to the workspace chat provider and model if they exist
     if (this.#workspace?.chatProvider && this.#workspace?.chatModel) {
       return {
@@ -192,6 +219,14 @@ class EphemeralAgentHandler extends AgentHandler {
       if (!fallback) throw new Error("No valid provider found for the agent.");
       this.provider = fallback.provider; // re-set the provider to the fallback provider so it is not null.
       return fallback.model; // set its defined model based on fallback logic.
+    }
+
+    if (this.provider === "vela-dispatch") {
+      return (
+        this.#workspace?.agentModel ??
+        this.#workspace?.chatModel ??
+        null
+      );
     }
 
     // The provider was explicitly set, so check if the workspace has an agent model set.
@@ -317,17 +352,23 @@ class EphemeralAgentHandler extends AgentHandler {
 
       // Load MCP plugin. This is marked by `@@mcp_` in the array of functions to load.
       // All sub-tools are loaded here and are denoted by `pluginName:toolName` as their identifier.
-      // This will replace the parent MCP server plugin with the sub-tools as child plugins so they
-      // can be called directly by the agent when invoked.
-      // Since to get to this point, the `activeMCPServers` method has already been called, we can
-      // safely assume that the MCP server is running and the tools are available/loaded.
+      // The target MCP server is started on demand if it is not already running.
       if (name.startsWith("@@mcp_")) {
         const mcpPluginName = name.replace("@@mcp_", "");
-        const plugins =
-          await new MCPCompatibilityLayer().convertServerToolsToPlugins(
-            mcpPluginName,
-            this.aibitat
-          );
+        const mcpLayer = new MCPCompatibilityLayer();
+        if (!mcpLayer.mcps[mcpPluginName]) {
+          const started = await mcpLayer.startMCPServer(mcpPluginName);
+          if (!started.success) {
+            this.log(
+              `MCP ${mcpPluginName} failed to start: ${started.error || "unknown error"}`
+            );
+            continue;
+          }
+        }
+        const plugins = await mcpLayer.convertServerToolsToPlugins(
+          mcpPluginName,
+          this.aibitat
+        );
         if (!plugins) {
           this.log(
             `MCP ${mcpPluginName} not found in MCP server config. Skipping inclusion to agent cluster.`
@@ -391,23 +432,30 @@ class EphemeralAgentHandler extends AgentHandler {
     }
   }
 
-  async #loadAgents() {
+  async #loadAgents({ skipDefaultTools = false } = {}) {
     // Default User agent and workspace agent
     this.log(`Attaching user and default agent to Agent cluster.`);
     this.aibitat.agent(USER_AGENT.name, USER_AGENT.getDefinition());
-    const user = this.#userId
-      ? await User.get({ id: Number(this.#userId) })
-      : null;
+    const user =
+      this.#userId != null
+        ? await User.get({ id: Number(this.#userId) })
+        : null;
 
-    this.aibitat.agent(
-      WORKSPACE_AGENT.name,
-      await WORKSPACE_AGENT.getDefinition(
-        this.provider,
-        this.#workspace,
-        user,
-        this.#prompt
-      )
+    const workspaceAgentDef = await WORKSPACE_AGENT.getDefinition(
+      this.provider,
+      this.#workspace,
+      user,
+      this.#prompt
     );
+    if (this.#agentRoleOverride) {
+      workspaceAgentDef.role = this.#agentRoleOverride;
+    }
+    this.aibitat.agent(WORKSPACE_AGENT.name, workspaceAgentDef);
+
+    if (skipDefaultTools) {
+      this.#funcsToLoad = [];
+      return;
+    }
 
     this.#funcsToLoad = [
       ...(await agentSkillsFromSystemSettings()),
@@ -503,15 +551,18 @@ class EphemeralAgentHandler extends AgentHandler {
       toolOverrides: null,
     }
   ) {
+    const defaultModel =
+      this.provider === "vela-dispatch" ? null : "gpt-4o";
     this.aibitat = new AIbitat({
       provider: this.provider ?? "openai",
-      model: this.model ?? "gpt-4o",
+      model: this.model ?? defaultModel,
       chats: await this.#chatHistory(20),
       handlerProps: {
         invocation: {
           workspace: this.#workspace,
           workspace_id: this.#workspace?.id ?? null,
           userId: this.#userId,
+          hubUserId: this.#hubUserId,
         },
         log: this.log,
         routingMetadata: this.routingMetadata || null,
@@ -554,7 +605,7 @@ class EphemeralAgentHandler extends AgentHandler {
     );
 
     // Load required agents (Default + custom)
-    await this.#loadAgents();
+    await this.#loadAgents({ skipDefaultTools: !!args.toolOverrides });
 
     // Override tools if specified (e.g., for scheduled jobs with per-job tool selection)
     if (args.toolOverrides) {
@@ -705,7 +756,7 @@ class EphemeralEventListener extends EventEmitter {
     const onChunkHandler = (data) => {
       if (data.type === "statusResponse") {
         return writeResponseChunk(response, {
-          id: uuid,
+          uuid,
           type: "agentThought",
           thought: data.content,
           sources: [],
@@ -718,11 +769,22 @@ class EphemeralEventListener extends EventEmitter {
 
       if (data.type === "fileDownloadCard") {
         return writeResponseChunk(response, {
-          id: uuid,
+          uuid,
           type: "fileDownload",
           fileDownload: data.content,
           close: false,
           error: null,
+        });
+      }
+
+      if (data.type === "wssFailure") {
+        return writeResponseChunk(response, {
+          uuid,
+          type: "abort",
+          textResponse: null,
+          sources: [],
+          close: true,
+          error: data.content || "Agent failed.",
         });
       }
 
@@ -732,7 +794,7 @@ class EphemeralEventListener extends EventEmitter {
 
         if (inner.type === "textResponseChunk") {
           return writeResponseChunk(response, {
-            id: uuid,
+            uuid,
             type: "textResponseChunk",
             textResponse: inner.content,
             sources: [],
@@ -743,7 +805,7 @@ class EphemeralEventListener extends EventEmitter {
 
         if (inner.type === "fullTextResponse") {
           return writeResponseChunk(response, {
-            id: uuid,
+            uuid,
             type: "textResponse",
             textResponse: inner.content,
             sources: [],
@@ -756,7 +818,7 @@ class EphemeralEventListener extends EventEmitter {
 
         if (inner.type === "usageMetrics" && inner.metrics) {
           return writeResponseChunk(response, {
-            id: uuid,
+            uuid,
             type: "usageMetrics",
             metrics: inner.metrics,
             close: false,
@@ -768,7 +830,7 @@ class EphemeralEventListener extends EventEmitter {
       }
 
       return writeResponseChunk(response, {
-        id: uuid,
+        uuid,
         type: "textResponse",
         textResponse: data.content,
         sources: [],

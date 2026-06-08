@@ -16,6 +16,7 @@ const StudioCodeContextState = createContext(null);
 export function StudioCodeContextProvider({
   workspace,
   onNewAgent = null,
+  refreshSplitSlugs = null,
   children,
 }) {
   const [searchParams] = useSearchParams();
@@ -68,8 +69,16 @@ export function StudioCodeContextProvider({
         );
       },
       onNewAgent,
+      refreshSplitSlugs,
     }),
-    [enabled, fillByThreadSlug, refreshThread, refreshThreads, onNewAgent]
+    [
+      enabled,
+      fillByThreadSlug,
+      refreshThread,
+      refreshThreads,
+      onNewAgent,
+      refreshSplitSlugs,
+    ]
   );
 
   return (

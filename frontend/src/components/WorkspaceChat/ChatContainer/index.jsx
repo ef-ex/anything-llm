@@ -56,7 +56,7 @@ import {
 } from "@/utils/orchestratorRuns";
 import {
   isStudioCodeEmbed,
-  loadStudioCodeRole,
+  resolveStoredRoleId,
   useOrchestratorChatForWorkspace,
 } from "@/utils/studioCodeRole";
 import { useStudioCodeContext, emitStudioCodeContextRefresh } from "@/contexts/StudioCodeContext";
@@ -73,6 +73,11 @@ export default function ChatContainer({
   layoutMode = null,
   onLayoutModeChange = null,
   showLayoutToggle = false,
+  studioCodeResolvedRoleId = null,
+  hideStudioCodeRolePicker = false,
+  studioCodeSplitPaneIndex = null,
+  studioCodeSplitPaneCount = 0,
+  studioCodeAssistantRoleId = "",
 }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -94,6 +99,11 @@ export default function ChatContainer({
     return knownHistory ?? [];
   });
   const embeddedHistoryLoadedRef = useRef(!embedded);
+  const studioCodeRolesRef = useRef({
+    roles: [],
+    defaultRoleId: "",
+    assistantRoleId: "",
+  });
   const orchestratorMode = !!workspace?.velaProjectId;
 
   useEffect(() => {
@@ -102,6 +112,29 @@ export default function ChatContainer({
       embeddedHistoryLoadedRef.current = true;
     }
   }, [knownHistory, embedded]);
+
+  useEffect(() => {
+    if (!studioCodeEmbed || !workspace?.slug || !workspace?.velaProjectId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await Vela.listStudioCodeRoles(workspace.slug, {
+          projectId: workspace.velaProjectId,
+        });
+        if (cancelled) return;
+        studioCodeRolesRef.current = {
+          roles: data?.roles || [],
+          defaultRoleId: data?.default_role_id || "",
+          assistantRoleId: data?.assistant_role_id || "",
+        };
+      } catch {
+        /* optional preload */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [studioCodeEmbed, workspace?.slug, workspace?.velaProjectId]);
 
   useEffect(() => {
     if (!embedded || !workspace?.slug) return;
@@ -639,17 +672,43 @@ export default function ChatContainer({
       const attachments = promptMessage?.attachments ?? parseAttachments();
       window.dispatchEvent(new CustomEvent(CLEAR_ATTACHMENTS_EVENT));
 
+      let studioCodeRoleId = null;
       if (studioCodeEmbed) {
-        const roleId = loadStudioCodeRole(workspace.slug);
-        if (roleId) {
-          try {
-            const applied = await Vela.applyRolePreset(workspace.slug, roleId);
-            if (applied?.workspace) {
-              setActiveWorkspace((prev) => ({ ...prev, ...applied.workspace }));
+        if (studioCodeResolvedRoleId) {
+          studioCodeRoleId = studioCodeResolvedRoleId;
+        } else {
+          let { roles, defaultRoleId, assistantRoleId } =
+            studioCodeRolesRef.current;
+          if (!roles.length && workspace?.velaProjectId) {
+            try {
+              const data = await Vela.listStudioCodeRoles(workspace.slug, {
+                projectId: workspace.velaProjectId,
+              });
+              roles = data?.roles || [];
+              defaultRoleId = data?.default_role_id || "";
+              assistantRoleId = data?.assistant_role_id || "";
+              studioCodeRolesRef.current = {
+                roles,
+                defaultRoleId,
+                assistantRoleId,
+              };
+            } catch {
+              /* fall through */
             }
-          } catch (err) {
-            console.warn("[vela] studio code role preset", err);
           }
+          studioCodeRoleId =
+            resolveStoredRoleId(
+              workspace.slug,
+              roles,
+              defaultRoleId,
+              threadSlug,
+              {
+                assistantRoleId:
+                  studioCodeAssistantRoleId || assistantRoleId,
+                splitPaneIndex: studioCodeSplitPaneIndex,
+                splitPaneCount: studioCodeSplitPaneCount,
+              }
+            ) || null;
         }
       }
 
@@ -667,6 +726,8 @@ export default function ChatContainer({
             setSocketId
           ),
         attachments,
+        roleId: studioCodeRoleId,
+        studioCodeAgent: studioCodeEmbed,
       });
       return;
     }
@@ -676,6 +737,10 @@ export default function ChatContainer({
     workspace,
     orchestratorUx,
     studioCodeEmbed,
+    studioCodeResolvedRoleId,
+    studioCodeAssistantRoleId,
+    studioCodeSplitPaneIndex,
+    studioCodeSplitPaneCount,
     submitOrchestratorPrompt,
     resumeRun,
     threadSlug,
@@ -815,6 +880,7 @@ export default function ChatContainer({
                       sendCommand={sendCommand}
                       attachments={files}
                       centered={true}
+                      hideStudioCodeRolePicker={hideStudioCodeRolePicker}
                     />
                   )}
                   {!studioCodeEmbed && (
@@ -934,6 +1000,7 @@ export default function ChatContainer({
                     sendCommand={sendCommand}
                     attachments={files}
                     centered={false}
+                    hideStudioCodeRolePicker={hideStudioCodeRolePicker}
                   />
                 )}
               </div>

@@ -58,7 +58,8 @@ function velaEndpoints(app) {
         if (workspace) {
           const { workspace: updated, message } = await Workspace.update(workspace.id, {
             chatProvider: "vela-dispatch",
-            velaRolePresetId: "code-maintainer",
+            agentProvider: "vela-dispatch",
+            chatMode: "agent",
           });
           workspace = updated || workspace;
           if (!workspace) {
@@ -78,8 +79,9 @@ function velaEndpoints(app) {
           null,
           {
             velaProjectId: projectId,
-            velaRolePresetId: "code-maintainer",
             chatProvider: "vela-dispatch",
+            agentProvider: "vela-dispatch",
+            chatMode: "agent",
           }
         );
         if (!created) {
@@ -242,6 +244,27 @@ function velaEndpoints(app) {
       response.end();
     }
   });
+
+  app.get(
+    "/workspace/:slug/vela/runtime-bindings",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      const workspace = response.locals.workspace;
+      const roleId = request.query.role_id || workspace.velaRolePresetId;
+      const projectId = request.query.project_id || workspace.velaProjectId;
+      if (!roleId || !projectId) {
+        return response.status(400).json({ error: "role_id and project_id required" });
+      }
+      const result = await velaApiRequest("orchestration/runtime-bindings", {
+        query: {
+          role_id: roleId,
+          project_id: projectId,
+          workspace_id: workspace?.id ? String(workspace.id) : undefined,
+        },
+      });
+      return sendVelaResult(response, result);
+    }
+  );
 
   app.get(
     "/workspace/:slug/vela/studio/code-roles",
@@ -629,11 +652,13 @@ function velaEndpoints(app) {
     [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
     async (request, response) => {
       const body = reqBody(request);
+      const workspace = response.locals.workspace;
       const result = await velaApiRequest("role-presets/resolve", {
         method: "POST",
         body: {
           role_id: body.role_id,
           required_capabilities: body.required_capabilities || [],
+          project_id: body.project_id || workspace?.velaProjectId || undefined,
         },
       });
       sendVelaResult(response, result);
@@ -797,7 +822,11 @@ function velaEndpoints(app) {
 
         const routeResult = await velaApiRequest("role-presets/resolve", {
           method: "POST",
-          body: { role_id: roleId },
+          body: {
+            role_id: roleId,
+            project_id: workspace.velaProjectId || undefined,
+            required_capabilities: ["tool_calling"],
+          },
         });
         if (!routeResult.ok) {
           return sendVelaResult(response, routeResult);

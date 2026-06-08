@@ -10,9 +10,13 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { isStudioCodeEmbed, studioCodeThreadPath } from "@/utils/studioCodeRole";
-import { MAX_STUDIO_CODE_SPLIT_PANES } from "@/utils/studioCodeSplit";
+import {
+  MAX_STUDIO_CODE_SPLIT_PANES,
+  removeSplitThreadSlug,
+} from "@/utils/studioCodeSplit";
+import { useStudioCodeContext } from "@/contexts/StudioCodeContext";
 
 const THREAD_CALLOUT_DETAIL_WIDTH = 26;
 export default function ThreadItem({
@@ -33,6 +37,7 @@ export default function ThreadItem({
   contextFillBorderClass = "",
 }) {
   const { slug: urlSlug, threadSlug = null } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const studioCode = isStudioCodeEmbed(searchParams);
   const workspaceSlug = workspace?.slug ?? urlSlug;
@@ -191,6 +196,8 @@ export default function ThreadItem({
                 onRemove={onRemove}
                 close={() => setShowOptions(false)}
                 currentThreadSlug={threadSlug}
+                studioCode={studioCode}
+                workspaceSlug={workspaceSlug}
               />
             )}
           </div>
@@ -207,7 +214,12 @@ function OptionsMenu({
   onRemove,
   close,
   currentThreadSlug,
+  studioCode = false,
+  workspaceSlug: workspaceSlugProp,
 }) {
+  const workspaceSlug = workspaceSlugProp ?? workspace?.slug;
+  const navigate = useNavigate();
+  const studioCtx = useStudioCodeContext();
   const menuRef = useRef(null);
 
   // Ref menu options
@@ -282,10 +294,18 @@ function OptionsMenu({
     }
     if (success) {
       showToast("Thread deleted successfully!", "success", { clear: true });
+      if (studioCode) {
+        removeSplitThreadSlug(workspaceSlug, thread.slug);
+        studioCtx?.refreshSplitSlugs?.();
+      }
       onRemove(thread.id);
-      // Redirect if deleting the active thread
+      // Redirect if deleting the active thread (stay in Studio Code embed)
       if (currentThreadSlug === thread.slug) {
-        window.location.href = paths.workspace.chat(workspace.slug);
+        if (studioCode) {
+          navigate(studioCodeThreadPath(workspaceSlug), { replace: true });
+        } else {
+          navigate(paths.workspace.chat(workspace.slug), { replace: true });
+        }
       }
       return;
     }
